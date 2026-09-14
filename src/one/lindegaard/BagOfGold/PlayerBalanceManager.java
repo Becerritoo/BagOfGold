@@ -103,8 +103,8 @@ public class PlayerBalanceManager implements Listener {
 
 		PlayerBalances ps = new PlayerBalances();
 		try {
-			plugin.getMessages().debug("PlayerBalanceManager: loading %s balance (%s,%s) from DB",
-					offlinePlayer.getName(), worldGroup, gamemode);
+			plugin.getMessages().debug("PlayerBalanceManager: loading %s balance uuid=%s (%s,%s) from DB",
+					offlinePlayer.getName(), offlinePlayer.getUniqueId(), worldGroup, gamemode);
 			ps = plugin.getStoreManager().loadPlayerBalances(offlinePlayer);
 			mBalances.put(uuid, ps);
 		} catch (UserNotFoundException e) {
@@ -365,9 +365,12 @@ public class PlayerBalanceManager implements Listener {
 	public void onPlayerDeathEvent(PlayerDeathEvent event) {
 		Player player = event.getEntity();
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(player);
+		double balanceBefore = ps.getBalance() + ps.getBalanceChanges();
 		ps.setBalance(0);
 		ps.setBalanceChanges(0);
 		setPlayerBalance(player, ps);
+		if (plugin.getBalanceLedgerStore() != null)
+			plugin.getBalanceLedgerStore().record(player, balanceBefore, 0, "death");
 		plugin.getMessages().debug("PlayerBalancManager: player died balance=0");
 	}
 

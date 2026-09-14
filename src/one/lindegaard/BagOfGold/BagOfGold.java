@@ -40,6 +40,7 @@ import one.lindegaard.BagOfGold.rewards.GringottsItems;
 import one.lindegaard.CustomItemsLib.compatibility.CompatPlugin;
 import one.lindegaard.CustomItemsLib.server.Servers;
 import one.lindegaard.CustomItemsLib.storage.DataStoreException;
+import one.lindegaard.BagOfGold.storage.BalanceLedgerStore;
 import one.lindegaard.BagOfGold.storage.DataStoreManager;
 import one.lindegaard.BagOfGold.storage.IDataStore;
 import one.lindegaard.BagOfGold.storage.MySQLDataStore;
@@ -58,6 +59,7 @@ public class BagOfGold extends JavaPlugin {
 	private CommandDispatcher mCommandDispatcher;
 	private NpcCommand mNpcCommand;
 	private IDataStore mStore;
+	private BalanceLedgerStore mBalanceLedgerStore;
 	private DataStoreManager mStoreManager;
 	private RewardManager mRewardManager;
 	private CompatibilityManager mCompatibilityManager;
@@ -163,6 +165,8 @@ public class BagOfGold extends JavaPlugin {
 
 		mBankManager = new BankManager(this);
 
+		mBalanceLedgerStore = new BalanceLedgerStore(this);
+
 		mStoreManager = new DataStoreManager(this, mStore);
 
 		mPlayerBalanceManager = new PlayerBalanceManager(this);
@@ -224,6 +228,8 @@ public class BagOfGold extends JavaPlugin {
 			return;
 
 		mBankManager.shutdown();
+		if (mBalanceLedgerStore != null)
+			mBalanceLedgerStore.shutdown();
 
 		try {
 			getMessages().debug("Shutdown StoreManager");
@@ -305,6 +311,10 @@ public class BagOfGold extends JavaPlugin {
 	 */
 	public DataStoreManager getDataStoreManager() {
 		return mStoreManager;
+	}
+
+	public BalanceLedgerStore getBalanceLedgerStore() {
+		return mBalanceLedgerStore;
 	}
 
 	/**

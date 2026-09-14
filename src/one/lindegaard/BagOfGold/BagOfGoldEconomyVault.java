@@ -2,9 +2,15 @@ package one.lindegaard.BagOfGold;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
@@ -20,6 +26,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 
 	private BagOfGold plugin;
 	private Economy mEconomy;
+	private final Map<String, UUID> virtualAccountUuids = new ConcurrentHashMap<>();
 
 	public BagOfGoldEconomyVault(BagOfGold plugin) {
 		this.plugin = plugin;
@@ -173,7 +180,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public double getBalance(String playername, String world) {
 		if (isEnabled())
-			return getBalance(playername);
+			return getBalance(Bukkit.getOfflinePlayer(playername), world);
 		else
 			return mEconomy.getBalance(playername, world);
 	}
@@ -189,7 +196,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public double getBalance(OfflinePlayer offlinePlayer, String world) {
 		if (isEnabled())
-			return getBalance(offlinePlayer);
+			return getWorldBalance(offlinePlayer, world);
 		else
 			return mEconomy.getBalance(offlinePlayer, world);
 	}
@@ -329,7 +336,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse depositPlayer(String playername, String world, double amount) {
 		if (isEnabled())
-			return depositPlayer(playername, amount);
+			return depositPlayer(Bukkit.getOfflinePlayer(playername), world, amount);
 		else
 			return mEconomy.depositPlayer(playername, world, amount);
 	}
@@ -346,9 +353,19 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	 */
 	@Override
 	public EconomyResponse depositPlayer(OfflinePlayer offlinePlayer, String world, double amount) {
-		if (isEnabled())
-			return depositPlayer(offlinePlayer, amount);
-		else
+		if (isEnabled()) {
+			if (amount < 0)
+				return failure(amount, getWorldBalance(offlinePlayer, world), "Cannot deposit a negative amount");
+			if (usesCurrentAccount(offlinePlayer, world))
+				return depositPlayer(offlinePlayer, amount);
+
+			PlayerBalance balance = getWorldPlayerBalance(offlinePlayer, world);
+			double before = total(balance);
+			balance.setBalanceChanges(Tools.round(balance.getBalanceChanges() + amount));
+			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, balance);
+			recordBalanceLedger(offlinePlayer, before, total(balance), "depositPlayer-world");
+			return success(amount, total(balance));
+		} else
 			return mEconomy.depositPlayer(offlinePlayer, world, amount);
 	}
 
@@ -386,7 +403,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean has(String playername, String world, double amount) {
 		if (isEnabled())
-			return has(playername, amount);
+			return has(Bukkit.getOfflinePlayer(playername), world, amount);
 		else
 			return mEconomy.has(playername, world, amount);
 	}
@@ -404,7 +421,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean has(OfflinePlayer offlinePlayer, String world, double amount) {
 		if (isEnabled())
-			return has(offlinePlayer, amount);
+			return getWorldBalance(offlinePlayer, world) >= amount;
 		else
 			return mEconomy.has(offlinePlayer, world, amount);
 	}
@@ -504,7 +521,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse withdrawPlayer(String playername, String world, double amount) {
 		if (isEnabled())
-			return withdrawPlayer(playername, amount);
+			return withdrawPlayer(Bukkit.getOfflinePlayer(playername), world, amount);
 		else
 			return mEconomy.withdrawPlayer(playername, world, amount);
 	}
@@ -521,10 +538,97 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	 */
 	@Override
 	public EconomyResponse withdrawPlayer(OfflinePlayer offlinePlayer, String world, double amount) {
-		if (isEnabled())
-			return withdrawPlayer(offlinePlayer, amount);
-		else
+		if (isEnabled()) {
+			double currentBalance = getWorldBalance(offlinePlayer, world);
+			if (amount < 0)
+				return failure(amount, currentBalance, "Cannot withdraw a negative amount");
+			if (currentBalance < amount)
+				return failure(amount, currentBalance, "Insufficient funds");
+			if (usesCurrentAccount(offlinePlayer, world))
+				return withdrawPlayer(offlinePlayer, amount);
+
+			PlayerBalance balance = getWorldPlayerBalance(offlinePlayer, world);
+			double before = total(balance);
+			balance.setBalanceChanges(Tools.round(balance.getBalanceChanges() - amount));
+			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, balance);
+			recordBalanceLedger(offlinePlayer, before, total(balance), "withdrawPlayer-world");
+			return success(amount, total(balance));
+		} else
 			return mEconomy.withdrawPlayer(offlinePlayer, world, amount);
+	}
+
+	private void recordBalanceLedger(OfflinePlayer offlinePlayer, double before, double after, String sourceHint) {
+		if (plugin.getBalanceLedgerStore() != null)
+			plugin.getBalanceLedgerStore().record(offlinePlayer, before, after, sourceHint);
+	}
+
+	private PlayerBalance getWorldPlayerBalance(OfflinePlayer offlinePlayer, String world) {
+		OfflinePlayer account = resolveVirtualAccount(offlinePlayer);
+		GameMode gameMode = account.isOnline() ? ((Player) account).getGameMode()
+				: Core.getWorldGroupManager().getDefaultGameMode();
+		return plugin.getPlayerBalanceManager().getPlayerBalanceInWorld(account, world, gameMode);
+	}
+
+	private OfflinePlayer resolveVirtualAccount(OfflinePlayer offlinePlayer) {
+		String name = offlinePlayer.getName();
+		if (name == null)
+			return offlinePlayer;
+
+		String lowerName = name.toLowerCase(Locale.ROOT);
+		if (!lowerName.startsWith("town-") && !lowerName.startsWith("nation-"))
+			return offlinePlayer;
+
+		UUID uuid = virtualAccountUuids.computeIfAbsent(lowerName, ignored -> findTownyAccountUuid(name));
+		return uuid == null || uuid.equals(offlinePlayer.getUniqueId())
+				? offlinePlayer
+				: Bukkit.getOfflinePlayer(uuid);
+	}
+
+	private UUID findTownyAccountUuid(String accountName) {
+		Plugin towny = Bukkit.getPluginManager().getPlugin("Towny");
+		if (towny == null || !towny.isEnabled())
+			return null;
+
+		boolean townAccount = accountName.regionMatches(true, 0, "town-", 0, 5);
+		String governmentName = accountName.substring(townAccount ? 5 : 7);
+		try {
+			Class<?> apiClass = Class.forName("com.palmergames.bukkit.towny.TownyAPI", true,
+					towny.getClass().getClassLoader());
+			Object api = apiClass.getMethod("getInstance").invoke(null);
+			Object government = apiClass.getMethod(townAccount ? "getTown" : "getNation", String.class)
+					.invoke(api, governmentName);
+			if (government == null)
+				return null;
+			return (UUID) government.getClass().getMethod("getUUID").invoke(government);
+		} catch (ReflectiveOperationException | LinkageError e) {
+			plugin.getLogger().warning("Could not resolve Towny account UUID for " + accountName + ": "
+					+ e.getMessage());
+			return null;
+		}
+	}
+
+	private double getWorldBalance(OfflinePlayer offlinePlayer, String world) {
+		return total(getWorldPlayerBalance(offlinePlayer, world));
+	}
+
+	private boolean usesCurrentAccount(OfflinePlayer offlinePlayer, String world) {
+		if (!offlinePlayer.isOnline())
+			return false;
+		String requestedGroup = Core.getWorldGroupManager().getWorldGroup(world);
+		String currentGroup = Core.getWorldGroupManager().getCurrentWorldGroup(offlinePlayer);
+		return requestedGroup.equals(currentGroup);
+	}
+
+	private double total(PlayerBalance balance) {
+		return Tools.round(balance.getBalance()) + Tools.round(balance.getBalanceChanges());
+	}
+
+	private EconomyResponse success(double amount, double balance) {
+		return new EconomyResponse(amount, balance, ResponseType.SUCCESS, null);
+	}
+
+	private EconomyResponse failure(double amount, double balance, String message) {
+		return new EconomyResponse(amount, balance, ResponseType.FAILURE, message);
 	}
 
 	/**

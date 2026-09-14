@@ -133,7 +133,7 @@ public class MySQLDataStore extends DatabaseDataStore {
 		plugin.getMessages().debug("MySQLDatastore: create mh_PlayerSettings");
 		create.executeUpdate("CREATE TABLE IF NOT EXISTS mh_PlayerSettings "//
 				+ "(UUID CHAR(40),"//
-				+ " NAME VARCHAR(20),"//
+				+ " NAME VARCHAR(64),"//
 				+ " LAST_WORLDGRP VARCHAR(20) NOT NULL DEFAULT 'default'," //
 				+ " LEARNING_MODE INTEGER NOT NULL DEFAULT " + lm + ","//
 				+ " MUTE_MODE INTEGER NOT NULL DEFAULT 0,"//
@@ -195,7 +195,7 @@ public class MySQLDataStore extends DatabaseDataStore {
 		plugin.getMessages().debug("MySQLDatastore: create mh_PlayerSettings");
 		create.executeUpdate("CREATE TABLE IF NOT EXISTS mh_PlayerSettings "//
 				+ "(UUID CHAR(40),"//
-				+ " NAME VARCHAR(20),"//
+				+ " NAME VARCHAR(64),"//
 				+ " LAST_WORLDGRP VARCHAR(20) NOT NULL DEFAULT 'default'," //
 				+ " LEARNING_MODE INTEGER NOT NULL DEFAULT " + lm + ","//
 				+ " MUTE_MODE INTEGER NOT NULL DEFAULT 0,"//

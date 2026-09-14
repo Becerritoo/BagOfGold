@@ -47,6 +47,15 @@ public class RewardManager {
 		return ps.getBalance() + ps.getBalanceChanges();
 	}
 
+	private double total(PlayerBalance ps) {
+		return Tools.round(ps.getBalance()) + Tools.round(ps.getBalanceChanges());
+	}
+
+	private void recordBalanceLedger(OfflinePlayer offlinePlayer, double before, double after, String sourceHint) {
+		if (plugin.getBalanceLedgerStore() != null)
+			plugin.getBalanceLedgerStore().record(offlinePlayer, before, after, sourceHint);
+	}
+
 	/**
 	 * set the player balance to the amount of money in both the player inventory
 	 * and in the balance stored in memory.
@@ -67,6 +76,7 @@ public class RewardManager {
 			ps.setBalanceChanges(ps.getBalanceChanges() + (amount - bal));
 			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 		}
+		recordBalanceLedger(offlinePlayer, bal, amount, "setbalance");
 		return true;
 	}
 
@@ -81,6 +91,7 @@ public class RewardManager {
 	 */
 	public boolean depositPlayer(OfflinePlayer offlinePlayer, double amount) {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
+		double before = total(ps);
 		double drop = 0, give = amount;
 		if (amount == 0) {
 			return true;
@@ -102,6 +113,7 @@ public class RewardManager {
 			plugin.getMessages().debug("Deposit %s to %s's account, new balance is %s", Tools.format(give),
 					offlinePlayer.getName(), Tools.format(ps.getBalance() + ps.getBalanceChanges()));
 			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
+			recordBalanceLedger(offlinePlayer, before, total(ps), "depositPlayer");
 			return true;
 		} else {
 			plugin.getMessages().debug("Could not deposit %s to %s's account, because the number is negative",
@@ -121,6 +133,7 @@ public class RewardManager {
 	 */
 	public boolean withdrawPlayer(OfflinePlayer offlinePlayer, double amount) {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
+		double before = total(ps);
 		if (amount >= 0) {
 			if (hasMoney(offlinePlayer, amount)) {
 				if (offlinePlayer.isOnline()) {
@@ -132,6 +145,7 @@ public class RewardManager {
 				plugin.getMessages().debug("Withdraw %s from %s's account, new balance is %s", Tools.format(amount),
 						offlinePlayer.getName(), Tools.format(ps.getBalance() + ps.getBalanceChanges())); //OK
 				plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
+				recordBalanceLedger(offlinePlayer, before, total(ps), "withdrawPlayer");
 	/**			
 				if (offlinePlayer.isOnline() && ((Player) offlinePlayer).isValid()) {
 					Player player = (Player) offlinePlayer;
@@ -159,6 +173,7 @@ public class RewardManager {
 					ps.setBalance(0);
 					ps.setBalanceChanges(0);
 					plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
+					recordBalanceLedger(offlinePlayer, before, 0, "withdrawPlayer");
 					return true;
 				}
 				return false;
@@ -507,6 +522,10 @@ public class RewardManager {
 	 * @param player
 	 */
 	public void adjustPlayerBalanceToAmounOfMoneyInInventory(Player player) {
+		adjustPlayerBalanceToAmounOfMoneyInInventory(player, "sync-inventory");
+	}
+
+	public void adjustPlayerBalanceToAmounOfMoneyInInventory(Player player, String sourceHint) {
 		double amountInInventory = getAmountInInventory(player);
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(player);
 		ItemStack is = player.getItemOnCursor();
@@ -518,6 +537,7 @@ public class RewardManager {
 				inHand = reward.getMoney() * amount;
 		}
 		if (ps != null) {
+			double before = total(ps);
 			double diff = Tools.round(amountInInventory + inHand)
 					- (Tools.round(ps.getBalance()) + Tools.round(ps.getBalanceChanges()));
 			// plugin.getMessages().debug("Adjusting Balance to amt: diff=%s", diff);
@@ -530,6 +550,8 @@ public class RewardManager {
 				removeMoneyFromPlayerBalance(player, -diff);
 			else
 				plugin.getMessages().debug("there was no difference");
+			if (Tools.round(diff) != 0)
+				recordBalanceLedger(player, before, Tools.round(before + diff), sourceHint);
 
 		}
 	}

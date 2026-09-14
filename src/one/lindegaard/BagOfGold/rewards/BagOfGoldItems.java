@@ -184,18 +184,26 @@ public class BagOfGoldItems implements Listener {
 		if (event.getRightClicked().getType() == EntityType.ITEM_FRAME
 				&& Reward.isReward(player.getInventory().getItemInMainHand())) {
 			Reward reward = Reward.getReward(player.getInventory().getItemInMainHand());
-			if (reward.getMoney() != 0) {
-				plugin.getMessages().debug("onPlayerInteractEntityEvent: %s placed a BagOfGod in an ItemFrame",
-						player.getName());
-				plugin.getRewardManager().removeMoneyFromPlayer(player, reward.getMoney());
-				if (!Core.getPlayerSettingsManager().getPlayerSettings(player).isMuted())
-					plugin.getMessages().playerActionBarMessageQueue(player,
-							ChatColor.valueOf(Core.getConfigManager().rewardTextColor) + reward.getDisplayName()
-									+ plugin.getMessages().getString("bagofgold.moneydrop", "money",
-											Tools.round(reward.getMoney())));
+				if (reward.getMoney() != 0) {
+					plugin.getMessages().debug("onPlayerInteractEntityEvent: %s placed a BagOfGod in an ItemFrame",
+							player.getName());
+					Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
+						@Override
+						public void run() {
+							if (player.isOnline() && player.isValid())
+								plugin.getRewardManager().adjustPlayerBalanceToAmounOfMoneyInInventory(player,
+										"itemframe-place");
+						}
+					}, 1L);
+					if (!Core.getPlayerSettingsManager().getPlayerSettings(player).isMuted())
+						plugin.getMessages().playerActionBarMessageQueue(player,
+								plugin.getMessages().getString("bagofgold.moneyframe", Core.PH_MONEY,
+										Tools.round(reward.getMoney()), Core.PH_REWARDNAME,
+										ChatColor.valueOf(Core.getConfigManager().rewardTextColor)
+												+ Core.getConfigManager().bagOfGoldName.trim()));
+				}
 			}
 		}
-	}
 
 	@EventHandler
 	public void onPlayerInteractEvent(PlayerInteractEvent event) {
