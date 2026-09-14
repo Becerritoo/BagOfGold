@@ -8,6 +8,13 @@ Websites - more info
 - [SpigotMC](https://www.spigotmc.org/resources/mobhunting.3582/)
 
 ## Features
-* [Supports Minecraft 1.8 - 1.19.4]
+* [Supports Minecraft 1.8 - 1.19.4 upstream; Jarochitoland fork targets Paper 1.21.11]
 * Tested on SpigotMC, PaperSpigot and Craftbukkit 
 * Language support (EN, FR, HU, PT, RU, ZH) 
+
+## Jarochitoland fork
+This branch keeps the upstream BagOfGold 4.5.6 codebase but carries Jarochitoland
+fixes for modern Paper/Towny servers. Fork builds use the `-JL.x` suffix, for
+example `4.5.6-JL.9`, so they are not confused with upstream releases.
+
+See `docs/JAROCHITOLAND-FORK.md` for the current fork notes.

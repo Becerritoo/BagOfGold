@@ -1,3 +1,11 @@
+V4.5.6-JL.9
+* Jarochitoland fork release for Paper 1.21.11.
+* Updated CustomItemsLib dependency to 1.1.0-JL.12.
+* Added MySQL balance ledger table mh_balance_ledger for balance-change audits.
+* Fixed Vault world-balance operations for Towny town-/nation- virtual accounts by resolving UUID-backed Towny accounts.
+* Fixed ItemFrame placement handling by resyncing player inventory balance after placement instead of subtracting immediately.
+* Changed MySQL mh_PlayerSettings NAME column creation to VARCHAR(64) for longer account names.
+
 V4.5.7
 * Support for TitleManager removed because the Repository is broken and the plugin has not been updated for a long time.
 V4.5.6
