@@ -3,9 +3,9 @@
 This fork is based on upstream `Rocologo/BagOfGold` and keeps the upstream
 version number plus a Jarochitoland suffix:
 
-`4.5.6-JL.9`
+`4.5.6-JL.10`
 
-The `4.5.6` part identifies the upstream base. The `JL.9` part identifies the
+The `4.5.6` part identifies the upstream base. The `JL.10` part identifies the
 Jarochitoland fork revision.
 
 ## Active Branch
@@ -27,6 +27,8 @@ This branch targets the live Paper 1.21.11 server line.
   provider during startup.
 - Vault world-balance methods now resolve Towny `town-` and `nation-`
   virtual account names to Towny UUID-backed OfflinePlayer accounts.
+- Legacy Vault player-name methods resolve the most recent BagOfGold UUID for a
+  name before falling back to Bukkit offline-name UUIDs.
 - MySQL balance changes are recorded in `mh_balance_ledger` when MySQL storage
   is enabled.
 - ItemFrame placement resyncs the player balance after the item is placed,

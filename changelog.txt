@@ -1,3 +1,7 @@
+V4.5.6-JL.10
+* Fixed legacy Vault name-based player lookups to resolve the most recent BagOfGold UUID before falling back to Bukkit offline-name UUIDs.
+* This prevents Towny modern/UUID economy calls that still pass through legacy Vault name methods from charging stale duplicate player accounts.
+
 V4.5.6-JL.9
 * Jarochitoland fork release for Paper 1.21.11.
 * Updated CustomItemsLib dependency to 1.1.0-JL.12.

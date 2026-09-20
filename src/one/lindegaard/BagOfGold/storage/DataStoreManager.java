@@ -2,6 +2,7 @@ package one.lindegaard.BagOfGold.storage;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -60,6 +61,10 @@ public class DataStoreManager {
 	// *****************************************************************************
 	public void requestPlayerBalances(OfflinePlayer player, IDataCallback<PlayerBalances> callback) {
 		mTaskThread.addTask(new PlayerBalanceRetrieverTask(player, mWaiting), callback);
+	}
+
+	public UUID findPlayerUuidByName(String playerName) throws DataStoreException {
+		return mStore.findPlayerUuidByName(playerName);
 	}
 
 	/**

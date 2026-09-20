@@ -21,6 +21,7 @@ import net.milkbowl.vault.economy.EconomyResponse;
 import net.milkbowl.vault.economy.EconomyResponse.ResponseType;
 import one.lindegaard.CustomItemsLib.Core;
 import one.lindegaard.CustomItemsLib.Tools;
+import one.lindegaard.CustomItemsLib.storage.DataStoreException;
 
 public class BagOfGoldEconomyVault implements Economy, Listener {
 
@@ -147,6 +148,36 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 			return mEconomy.format(money);
 	}
 
+	private OfflinePlayer getPlayerAccount(String playername) {
+		if (playername == null)
+			throw new IllegalArgumentException("Player name cannot be null");
+
+		if (Tools.isUUID(playername))
+			return Bukkit.getOfflinePlayer(UUID.fromString(playername));
+
+		Player onlinePlayer = Bukkit.getPlayerExact(playername);
+		if (onlinePlayer != null)
+			return onlinePlayer;
+
+		if (isVirtualAccountName(playername))
+			return Bukkit.getOfflinePlayer(playername);
+
+		try {
+			UUID uuid = plugin.getDataStoreManager().findPlayerUuidByName(playername);
+			if (uuid != null)
+				return Bukkit.getOfflinePlayer(uuid);
+		} catch (DataStoreException e) {
+			plugin.getLogger().warning("Could not resolve economy UUID for " + playername + ": " + e.getMessage());
+		}
+
+		return Bukkit.getOfflinePlayer(playername);
+	}
+
+	private boolean isVirtualAccountName(String accountName) {
+		String lowerName = accountName.toLowerCase(Locale.ROOT);
+		return lowerName.startsWith("town-") || lowerName.startsWith("nation-");
+	}
+
 	/**
 	 * @deprecated As of VaultAPI 1.4 use {@link #getBalance(OfflinePlayer)}
 	 *             instead.
@@ -154,7 +185,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public double getBalance(String playername) {
 		if (isEnabled())
-			return getBalance(Bukkit.getOfflinePlayer(playername));
+			return getBalance(getPlayerAccount(playername));
 		else
 			return mEconomy.getBalance(playername);
 	}
@@ -180,7 +211,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public double getBalance(String playername, String world) {
 		if (isEnabled())
-			return getBalance(Bukkit.getOfflinePlayer(playername), world);
+			return getBalance(getPlayerAccount(playername), world);
 		else
 			return mEconomy.getBalance(playername, world);
 	}
@@ -221,7 +252,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean createPlayerAccount(String playername) {
 		if (isEnabled())
-			return createPlayerAccount(Bukkit.getServer().getOfflinePlayer(playername));
+			return createPlayerAccount(getPlayerAccount(playername));
 		else
 			return mEconomy.createPlayerAccount(playername);
 	}
@@ -248,7 +279,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean createPlayerAccount(String playername, String world) {
 		if (isEnabled())
-			return createPlayerAccount(Bukkit.getServer().getOfflinePlayer(playername), world);
+			return createPlayerAccount(getPlayerAccount(playername), world);
 		else
 			return mEconomy.createPlayerAccount(playername, world);
 	}
@@ -305,7 +336,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse depositPlayer(String playername, double amount) {
 		if (isEnabled())
-			return depositPlayer(Bukkit.getOfflinePlayer(playername), amount);
+			return depositPlayer(getPlayerAccount(playername), amount);
 		else
 			return mEconomy.depositPlayer(playername, amount);
 	}
@@ -336,7 +367,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse depositPlayer(String playername, String world, double amount) {
 		if (isEnabled())
-			return depositPlayer(Bukkit.getOfflinePlayer(playername), world, amount);
+			return depositPlayer(getPlayerAccount(playername), world, amount);
 		else
 			return mEconomy.depositPlayer(playername, world, amount);
 	}
@@ -376,7 +407,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean has(String playername, double amount) {
 		if (isEnabled())
-			return has(Bukkit.getOfflinePlayer(playername), amount);
+			return has(getPlayerAccount(playername), amount);
 		else
 			return mEconomy.has(playername, amount);
 	}
@@ -403,7 +434,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public boolean has(String playername, String world, double amount) {
 		if (isEnabled())
-			return has(Bukkit.getOfflinePlayer(playername), world, amount);
+			return has(getPlayerAccount(playername), world, amount);
 		else
 			return mEconomy.has(playername, world, amount);
 	}
@@ -509,7 +540,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse withdrawPlayer(String playername, double amount) {
 		if (isEnabled())
-			return withdrawPlayer(Bukkit.getOfflinePlayer(playername), amount);
+			return withdrawPlayer(getPlayerAccount(playername), amount);
 		else
 			return mEconomy.withdrawPlayer(playername, amount);
 	}
@@ -521,7 +552,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse withdrawPlayer(String playername, String world, double amount) {
 		if (isEnabled())
-			return withdrawPlayer(Bukkit.getOfflinePlayer(playername), world, amount);
+			return withdrawPlayer(getPlayerAccount(playername), world, amount);
 		else
 			return mEconomy.withdrawPlayer(playername, world, amount);
 	}
@@ -651,7 +682,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse isBankMember(String account, String playername) {
 		if (isEnabled())
-			return isBankMember(account, Bukkit.getOfflinePlayer(playername));
+			return isBankMember(account, getPlayerAccount(playername));
 		else
 			return mEconomy.isBankMember(account, playername);
 	}
@@ -682,7 +713,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 	@Override
 	public EconomyResponse isBankOwner(String account, String playername) {
 		if (isEnabled())
-			return isBankOwner(account, Bukkit.getOfflinePlayer(playername));
+			return isBankOwner(account, getPlayerAccount(playername));
 		else
 			return mEconomy.isBankOwner(account, playername);
 	}

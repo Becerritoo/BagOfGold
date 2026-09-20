@@ -240,6 +240,23 @@ public abstract class DatabaseDataStore implements IDataStore {
 	}
 
 	@Override
+	public UUID findPlayerUuidByName(String playerName) throws DataStoreException {
+		String sql = "SELECT UUID FROM mh_PlayerSettings WHERE LOWER(NAME)=LOWER(?) "
+				+ "ORDER BY CASE WHEN LAST_LOGON IS NULL THEN 0 ELSE 1 END DESC, LAST_LOGON DESC LIMIT 1";
+		try (Connection mConnection = setupConnection();
+				PreparedStatement statement = mConnection.prepareStatement(sql)) {
+			statement.setString(1, playerName);
+			try (ResultSet result = statement.executeQuery()) {
+				if (result.next())
+					return UUID.fromString(result.getString("UUID"));
+			}
+		} catch (IllegalArgumentException | SQLException e) {
+			throw new DataStoreException(e);
+		}
+		return null;
+	}
+
+	@Override
 	public List<PlayerBalance> loadTop54(int n, String worldgroup, int gamemode) {
 		Connection mConnection;
 		List<PlayerBalance> playerBalances = new ArrayList<PlayerBalance>();

@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import org.bukkit.OfflinePlayer;
 
@@ -37,6 +38,8 @@ public interface IDataStore {
 	 * @throws SQLException
 	 */
 	PlayerBalances loadPlayerBalances(OfflinePlayer player) throws UserNotFoundException, DataStoreException;
+
+	UUID findPlayerUuidByName(String playerName) throws DataStoreException;
 
 	/**
 	 * Save the players Balances in the Database
