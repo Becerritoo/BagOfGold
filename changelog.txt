@@ -1,3 +1,8 @@
+V4.5.6-JL.11
+* Updated Shopkeepers compatibility to build against the public ShopkeepersAPI 2.28.1 dependency.
+* Replaced raw merchant inventory handling with Shopkeepers trade events.
+* BagOfGold now resynchronizes a player's balance after completed Shopkeepers trades that move BagOfGold money items.
+
 V4.5.6-JL.10
 * Fixed legacy Vault name-based player lookups to resolve the most recent BagOfGold UUID before falling back to Bukkit offline-name UUIDs.
 * This prevents Towny modern/UUID economy calls that still pass through legacy Vault name methods from charging stale duplicate player accounts.

@@ -223,9 +223,8 @@ public class ConfigManager extends AutoConfig {
 	@ConfigField(name = "enable-integration-citizens", category = "plugins.citizens", comment = "Enable integration with Citizens2")
 	public boolean enableIntegrationCitizens = true;
 
-	@ConfigField(name = "enable-integration-shopkeepers-beta", category = "plugins.shopkeepers", comment = "Enable integration with Shopkeepers. This is still in BETA TEST and "
-			+ "\nyou should not use the Shopkeeper integration. "
-			+ "\nYou can only SELL items and get BagOfGold at the moment!!!")
+	@ConfigField(name = "enable-integration-shopkeepers-beta", category = "plugins.shopkeepers", comment = "Enable integration with Shopkeepers using the public Shopkeepers API."
+			+ "\nThis keeps BagOfGold balances synchronized when Shopkeepers trades move BagOfGold money items.")
 	public boolean enableIntegrationShopkeepersBETA = false;
 
 	@ConfigField(name = "enable-integration-essentials", category = "plugins.essentials", comment = "Enable integration with Essentials"

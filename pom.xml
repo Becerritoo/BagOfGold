@@ -5,7 +5,7 @@
 	<artifactId>BagOfGold</artifactId>
 	<packaging>jar</packaging>
 	<!-- <version>4.5.6</version>  -->
-	<version>4.5.6-JL.10</version>
+	<version>4.5.6-JL.11</version>
 	<!-- <version>4.2.1-SNAPSHOT-B${build.number}</version> -->
 	<name>BagOfGold</name>
 	<url>https://www.spigotmc.org/resources/bagofgold.49332/</url>
@@ -20,6 +20,7 @@
 
 	<properties>
 		<customitemslib.version>1.1.0-JL.12</customitemslib.version>
+		<shopkeepers.version>2.28.1</shopkeepers.version>
 		<!--COPY!!! -->
 		<bossshop.version>1.9.8</bossshop.version>
 	</properties>
@@ -274,11 +275,11 @@
 			</exclusions>
 		</dependency>
 
-		<!-- Shopkeepers-->
+		<!-- Shopkeepers -->
 		<dependency>
 			<groupId>com.nisovin.shopkeepers</groupId>
-			<artifactId>Shopkeepers</artifactId>
-			<version>${Shopkeeper.version}</version>
+			<artifactId>ShopkeepersAPI</artifactId>
+			<version>${shopkeepers.version}</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -291,11 +292,10 @@
 			<url>file://${project.basedir}/lib</url>
 		</repository>
 
-		<!-- Shopkeepers BROKEN
 		<repository>
 			<id>shopkeepers-repo</id>
-			<url>https://nexus.lichtspiele.org/repository/releases/</url>
-		</repository>-->
+			<url>https://raw.githubusercontent.com/Shopkeepers/Repository/main/releases/</url>
+		</repository>
 
 	</repositories>
 

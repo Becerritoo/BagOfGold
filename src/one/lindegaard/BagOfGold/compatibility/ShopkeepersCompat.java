@@ -1,51 +1,52 @@
 package one.lindegaard.BagOfGold.compatibility;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryAction;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.event.inventory.TradeSelectEvent;
-import org.bukkit.event.inventory.InventoryType.SlotType;
-import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.MerchantInventory;
-import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.plugin.Plugin;
+
+import com.nisovin.shopkeepers.api.ShopkeepersAPI;
+import com.nisovin.shopkeepers.api.events.ShopkeeperTradeCompletedEvent;
+import com.nisovin.shopkeepers.api.events.ShopkeeperTradeEvent;
+import com.nisovin.shopkeepers.api.events.ShopkeepersStartupEvent;
+import com.nisovin.shopkeepers.api.util.UnmodifiableItemStack;
 
 import one.lindegaard.BagOfGold.BagOfGold;
 import one.lindegaard.CustomItemsLib.Core;
-import one.lindegaard.CustomItemsLib.compatibility.BagOfGoldCompat;
 import one.lindegaard.CustomItemsLib.compatibility.CompatPlugin;
 import one.lindegaard.CustomItemsLib.rewards.Reward;
-import one.lindegaard.CustomItemsLib.server.Servers;
 
 public class ShopkeepersCompat implements Listener {
 
-	BagOfGold plugin;
+	private static final String BALANCE_SOURCE_HINT = "shopkeepers-trade";
+
 	private static Plugin mPlugin;
 	private static boolean supported = false;
 
-	// https://www.spigotmc.org/resources/shopkeepers.80756/
+	private final BagOfGold plugin;
 
 	public ShopkeepersCompat() {
+		plugin = BagOfGold.getInstance();
+		Bukkit.getPluginManager().registerEvents(this, plugin);
+
 		if (!isEnabledInConfig()) {
 			Bukkit.getConsoleSender()
 					.sendMessage(BagOfGold.PREFIX + "Compatibility with Shopkeepers is disabled in config.yml");
-		} else {
-			mPlugin = Bukkit.getPluginManager().getPlugin(CompatPlugin.Shopkeepers.getName());
-			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX + "Enabling compatibility with Shopkeepers ("
-					+ getShopkeepers().getDescription().getVersion() + ")");
-			supported = true;
-
+			return;
 		}
-		Bukkit.getPluginManager().registerEvents(this, BagOfGold.getInstance());
+
+		mPlugin = Bukkit.getPluginManager().getPlugin(CompatPlugin.Shopkeepers.getName());
+		if (mPlugin == null) {
+			Bukkit.getConsoleSender().sendMessage(
+					BagOfGold.PREFIX + "Shopkeepers compatibility is enabled, but Shopkeepers is not installed.");
+			return;
+		}
+
+		enableIfShopkeepersApiReady();
 	}
 
 	// **************************************************************************
@@ -64,157 +65,82 @@ public class ShopkeepersCompat implements Listener {
 		return BagOfGold.getInstance().getConfigManager().enableIntegrationShopkeepersBETA;
 	}
 
+	private void enableIfShopkeepersApiReady() {
+		if (!isEnabledInConfig() || mPlugin == null) {
+			supported = false;
+			return;
+		}
+
+		if (!ShopkeepersAPI.isEnabled()) {
+			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX
+					+ "Shopkeepers compatibility is waiting for the Shopkeepers API to finish loading.");
+			supported = false;
+			return;
+		}
+
+		supported = true;
+		Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX + "Enabling compatibility with Shopkeepers ("
+				+ mPlugin.getDescription().getVersion() + ")");
+	}
+
+	private boolean tradeUsesBagOfGold(ShopkeeperTradeEvent event) {
+		return isBagOfGoldMoney(event.getOfferedItem1()) || isBagOfGoldMoney(event.getOfferedItem2())
+				|| isBagOfGoldMoney(event.getReceivedItem1()) || isBagOfGoldMoney(event.getReceivedItem2())
+				|| isBagOfGoldMoney(event.getResultItem());
+	}
+
+	private boolean isBagOfGoldMoney(UnmodifiableItemStack item) {
+		if (item == null)
+			return false;
+		return isBagOfGoldMoney(item.copy());
+	}
+
+	private boolean isBagOfGoldMoney(ItemStack item) {
+		if (!Reward.isReward(item))
+			return false;
+
+		Reward reward = Reward.getReward(item);
+		return reward.isBagOfGoldReward() || reward.isItemReward();
+	}
+
+	private void syncPlayerBalanceAfterTrade(Player player) {
+		if (player == null || !player.isOnline() || !player.isValid())
+			return;
+
+		if (player.getGameMode() != GameMode.SURVIVAL) {
+			Core.getMessages().debug("Shopkeepers trade skipped BagOfGold balance sync for %s in %s mode",
+					player.getName(), player.getGameMode());
+			return;
+		}
+
+		plugin.getRewardManager().adjustPlayerBalanceToAmounOfMoneyInInventory(player, BALANCE_SOURCE_HINT);
+	}
+
 	// **************************************************************************
 	// EVENTS
 	// **************************************************************************
 
-	@EventHandler(priority = EventPriority.HIGHEST)
-	public void onInventoryClickReward(InventoryClickEvent event) {
-
-		if (event.isCancelled() || event.getInventory() == null)
-			return;
-
-		InventoryAction action = event.getAction();
-		if (action == InventoryAction.NOTHING)
-			return;
-
-		ClickType clickType = event.getClick();
-
-		Player player = (Player) event.getWhoClicked();
-
-		ItemStack isCurrentSlot = event.getCurrentItem() != null ? event.getCurrentItem().clone() : null;
-		ItemStack isCursor = event.getCursor() != null ? event.getCursor().clone() : null;
-		ItemStack isNumberKey = clickType == ClickType.NUMBER_KEY
-				? player.getInventory().getItem(event.getHotbarButton())
-				: event.getCurrentItem();
-		ItemStack isSwapOffhand = clickType == ClickType.SWAP_OFFHAND
-				? player.getInventory().getItem(EquipmentSlot.OFF_HAND)
-				: event.getCurrentItem();
-
-		SlotType slotType = event.getSlotType();
-		Inventory inventory = event.getInventory();
-		Inventory clickedInventory = Servers.isMC113OrNewer() ? event.getClickedInventory() : inventory;
-
-		if (inventory.getType() == InventoryType.MERCHANT && BagOfGoldCompat.isSupported()) {
-			Core.getMessages().debug(
-					"action=%s, InvType=%s, clickedInvType=%s, slottype=%s, slotno=%s, current=%s, cursor=%s, view=%s, keyboardClick=%s, numberKey=%s, swap_hand=%s",
-					action, inventory.getType(), clickedInventory == null ? "null" : clickedInventory.getType(),
-					slotType, event.getSlot(), isCurrentSlot == null ? "null" : isCurrentSlot.getType(),
-					isCursor == null ? "null" : isCursor.getType(), event.getView().getType(),
-					event.getClick().isKeyboardClick(), isNumberKey == null ? "null" : isNumberKey.getType(),
-					isSwapOffhand == null ? "null" : isSwapOffhand.getType());
-
-		}
-
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void onShopkeepersStartup(ShopkeepersStartupEvent event) {
+		enableIfShopkeepersApiReady();
 	}
 
-	@EventHandler(priority = EventPriority.HIGHEST)
-	public void onTradeSelectEvent(TradeSelectEvent event) {
-		if (event.isCancelled())
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onShopkeeperTrade(ShopkeeperTradeEvent event) {
+		if (!supported || !tradeUsesBagOfGold(event))
 			return;
 
-		MerchantInventory inv = event.getInventory();
-		Player buyer = (Player) event.getWhoClicked();
-		MerchantRecipe recipe = inv.getMerchant().getRecipe(event.getIndex());
-		ItemStack is0 = recipe.getIngredients().get(0);
-		ItemStack is1 = recipe.getIngredients().get(1);
-		ItemStack isResult = recipe.getResult();
-
-		Core.getMessages().debug(
-				"TradeSelectEvent: Player=%s, index=%s (%sx%s,%sx%s,%sx%s) - inv=(%s,%s,%s), uses=%s, maxuses=%s, SpecialPrice=%s, PriceMultiplier=%s, demand=%s ",
-				buyer.getName(), event.getIndex(), is0.getAmount(), is0.getType(), is1.getAmount(), is1.getType(),
-				isResult.getAmount(), isResult.getType(), inv.getItem(0) != null ? inv.getItem(0).getType() : "null",
-				inv.getItem(1) != null ? inv.getItem(1).getType() : "null",
-				inv.getItem(2) != null ? inv.getItem(2).getType() : "null", recipe.getUses(), recipe.getMaxUses(),
-				recipe.getSpecialPrice(), recipe.getPriceMultiplier(), recipe.getDemand());
-
-		// Check if the player has the money
-		Core.getMessages().debug("TradeSelectEvent: Check is player has the money");
-		double moneyNeeded = (Reward.isReward(is0) ? Reward.getReward(is0).getMoney() * is0.getAmount() : 0)
-				+ (Reward.isReward(is1) ? Reward.getReward(is1).getMoney() * is1.getAmount() : 0);
-		if (!BagOfGold.getInstance().getEconomyManager().hasMoney(buyer, moneyNeeded)) {
-			Core.getMessages().debug("Player do not have enough money, tell him");
-			event.setCancelled(true);
-			return;
-		}
-
-		// Ingrediens0
-		boolean found0 = false;
-		if (Reward.isReward(is0)) {
-			double isMoney0 = (Reward.isReward(is0) ? Reward.getReward(is0).getMoney() * is0.getAmount() : 0);
-			if (inv.getItem(0) == null) {
-				Core.getMessages().debug("TradeSelectEvent: setItem0");
-				if (BagOfGold.getInstance().getEconomyManager().hasMoney(buyer, isMoney0)) {
-					inv.setItem(0, is0);
-					BagOfGold.getInstance().getEconomyManager().withdrawPlayer(buyer, isMoney0 * is0.getAmount());
-					found0 = true;
-				}
-			} else {
-				if (Reward.isReward(inv.getItem(0))) {
-					Reward slot0Reward = Reward.getReward(inv.getItem(0));
-					if (slot0Reward.isMoney()) {
-						BagOfGold.getInstance().getEconomyManager().depositPlayer(buyer, slot0Reward.getMoney());
-						inv.clear(0);
-					}
-				}
-			}
-		}
-
-		// Ingrediens1
-		boolean found1 = false;
-		if (Reward.isReward(is1)) {
-			double isMoney1 = (Reward.isReward(is1) ? Reward.getReward(is1).getMoney() * is1.getAmount() : 0);
-			if (inv.getItem(1) == null) {
-				Core.getMessages().debug("TradeSelectEvent: setItem1");
-				if (BagOfGold.getInstance().getEconomyManager().hasMoney(buyer, isMoney1)) {
-					inv.setItem(1, is1);
-					BagOfGold.getInstance().getEconomyManager().withdrawPlayer(buyer, isMoney1 * is1.getAmount());
-					found1 = true;
-				}
-			} else {
-				if (Reward.isReward(inv.getItem(1))) {
-					Reward slot1Reward = Reward.getReward(inv.getItem(0));
-					if (slot1Reward.isMoney()) {
-						BagOfGold.getInstance().getEconomyManager().depositPlayer(buyer, slot1Reward.getMoney());
-						inv.clear(1);
-					}
-				}
-			}
-		}
-
-		// RESULT
-		if (Reward.isReward(isResult)) {
-			double isResultMoney = (Reward.isReward(isResult)
-					? Reward.getReward(isResult).getMoney() * isResult.getAmount()
-					: 0);
-			if (inv.getItem(2) == null) {
-
-			}
-		} else {
-			if ((found0 || found1) && inv.getItem(2) == null) {
-				inv.setItem(2, isResult);
-				// event.getWhoClicked().getInventory().first(isResult);
-			}
-		}
-		buyer.updateInventory();
-
+		Core.getMessages().debug("Shopkeepers trade uses BagOfGold money items: player=%s, shopkeeper=%s",
+				event.getPlayer().getName(), event.getShopkeeper().getIdString());
 	}
 
-	@EventHandler(priority = EventPriority.HIGHEST)
-	public void onInventoryCloseEvent(InventoryCloseEvent event) {
-		Player player = (Player) event.getPlayer();
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void onShopkeeperTradeCompleted(ShopkeeperTradeCompletedEvent event) {
+		if (!supported || !tradeUsesBagOfGold(event.getCompletedTrade()))
+			return;
 
-		if (event.getInventory().getType() == InventoryType.MERCHANT) {
-			MerchantInventory inventory = (MerchantInventory) event.getInventory();
-			ItemStack is0 = inventory.getItem(0);
-			if (Reward.isReward(is0)) {
-				Reward reward0 = Reward.getReward(is0);
-				if (reward0.isMoney()) {
-					// BagOfGold.getInstance().getRewardManager().addMoneyToPlayerBalance(player,
-					// reward0.getMoney()*is0.getAmount());
-				}
-			}
-		}
+		Player player = event.getCompletedTrade().getPlayer();
+		Bukkit.getScheduler().runTask(plugin, () -> syncPlayerBalanceAfterTrade(player));
 	}
 
 }
