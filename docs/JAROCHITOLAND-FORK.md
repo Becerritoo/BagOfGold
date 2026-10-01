@@ -3,9 +3,9 @@
 This fork is based on upstream `Rocologo/BagOfGold` and keeps the upstream
 version number plus a Jarochitoland suffix:
 
-`4.5.6-JL.11`
+`4.5.6-JL.12`
 
-The `4.5.6` part identifies the upstream base. The `JL.11` part identifies the
+The `4.5.6` part identifies the upstream base. The `JL.12` part identifies the
 Jarochitoland fork revision.
 
 ## Active Branch
@@ -31,6 +31,8 @@ This branch targets the live Paper 1.21.11 server line.
   name before falling back to Bukkit offline-name UUIDs.
 - Shopkeepers compatibility uses the public ShopkeepersAPI and resynchronizes
   BagOfGold balances after trades that move BagOfGold money items.
+- Shopkeepers is discovered lazily at runtime so BagOfGold can register its
+  Vault economy before Towny selects an economy provider.
 - MySQL balance changes are recorded in `mh_balance_ledger` when MySQL storage
   is enabled.
 - ItemFrame placement resyncs the player balance after the item is placed,

@@ -3,17 +3,12 @@ package one.lindegaard.BagOfGold.compatibility;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.Plugin;
-
-import com.nisovin.shopkeepers.api.ShopkeepersAPI;
-import com.nisovin.shopkeepers.api.events.ShopkeeperTradeCompletedEvent;
-import com.nisovin.shopkeepers.api.events.ShopkeeperTradeEvent;
-import com.nisovin.shopkeepers.api.events.ShopkeepersStartupEvent;
-import com.nisovin.shopkeepers.api.util.UnmodifiableItemStack;
 
 import one.lindegaard.BagOfGold.BagOfGold;
 import one.lindegaard.CustomItemsLib.Core;
@@ -28,10 +23,11 @@ public class ShopkeepersCompat implements Listener {
 	private static boolean supported = false;
 
 	private final BagOfGold plugin;
+	private boolean startupListenerRegistered = false;
+	private boolean tradeListenersRegistered = false;
 
 	public ShopkeepersCompat() {
 		plugin = BagOfGold.getInstance();
-		Bukkit.getPluginManager().registerEvents(this, plugin);
 
 		if (!isEnabledInConfig()) {
 			Bukkit.getConsoleSender()
@@ -71,36 +67,161 @@ public class ShopkeepersCompat implements Listener {
 			return;
 		}
 
-		if (!ShopkeepersAPI.isEnabled()) {
+		if (!isShopkeepersApiReady()) {
+			registerStartupListener();
 			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX
 					+ "Shopkeepers compatibility is waiting for the Shopkeepers API to finish loading.");
 			supported = false;
 			return;
 		}
 
+		if (!registerTradeListeners()) {
+			supported = false;
+			return;
+		}
+
+		if (supported)
+			return;
+
 		supported = true;
 		Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX + "Enabling compatibility with Shopkeepers ("
 				+ mPlugin.getDescription().getVersion() + ")");
 	}
 
-	private boolean tradeUsesBagOfGold(ShopkeeperTradeEvent event) {
-		return isBagOfGoldMoney(event.getOfferedItem1()) || isBagOfGoldMoney(event.getOfferedItem2())
-				|| isBagOfGoldMoney(event.getReceivedItem1()) || isBagOfGoldMoney(event.getReceivedItem2())
-				|| isBagOfGoldMoney(event.getResultItem());
+	private boolean isShopkeepersApiReady() {
+		try {
+			Class<?> apiClass = loadShopkeepersClass("com.nisovin.shopkeepers.api.ShopkeepersAPI");
+			Object result = apiClass.getMethod("isEnabled").invoke(null);
+			return Boolean.TRUE.equals(result);
+		} catch (Exception e) {
+			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING
+					+ "Could not check Shopkeepers API state. Compatibility will stay disabled for now.");
+			if (plugin.getConfigManager().debug)
+				e.printStackTrace();
+			return false;
+		}
 	}
 
-	private boolean isBagOfGoldMoney(UnmodifiableItemStack item) {
-		if (item == null)
+	private Class<?> loadShopkeepersClass(String className) throws ClassNotFoundException {
+		return Class.forName(className, false, mPlugin.getClass().getClassLoader());
+	}
+
+	@SuppressWarnings("unchecked")
+	private boolean registerStartupListener() {
+		if (startupListenerRegistered)
+			return true;
+
+		try {
+			Class<? extends Event> eventClass = (Class<? extends Event>) loadShopkeepersClass(
+					"com.nisovin.shopkeepers.api.events.ShopkeepersStartupEvent");
+			registerDynamicEvent(eventClass, (listener, event) -> enableIfShopkeepersApiReady());
+			startupListenerRegistered = true;
+			return true;
+		} catch (Exception e) {
+			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING
+					+ "Could not register Shopkeepers startup listener. Compatibility is disabled.");
+			if (plugin.getConfigManager().debug)
+				e.printStackTrace();
 			return false;
-		return isBagOfGoldMoney(item.copy());
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private boolean registerTradeListeners() {
+		if (tradeListenersRegistered)
+			return true;
+
+		try {
+			Class<? extends Event> tradeEventClass = (Class<? extends Event>) loadShopkeepersClass(
+					"com.nisovin.shopkeepers.api.events.ShopkeeperTradeEvent");
+			Class<? extends Event> tradeCompletedEventClass = (Class<? extends Event>) loadShopkeepersClass(
+					"com.nisovin.shopkeepers.api.events.ShopkeeperTradeCompletedEvent");
+
+			registerDynamicEvent(tradeEventClass, (listener, event) -> handleTrade(event));
+			registerDynamicEvent(tradeCompletedEventClass, (listener, event) -> handleTradeCompleted(event));
+			tradeListenersRegistered = true;
+			return true;
+		} catch (Exception e) {
+			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING
+					+ "Could not register Shopkeepers trade listeners. Compatibility is disabled.");
+			if (plugin.getConfigManager().debug)
+				e.printStackTrace();
+			return false;
+		}
+	}
+
+	private void registerDynamicEvent(Class<? extends Event> eventClass, EventExecutor executor) {
+		Bukkit.getPluginManager().registerEvent(eventClass, this, EventPriority.MONITOR, executor, plugin, true);
+	}
+
+	private void handleTrade(Event event) {
+		if (!supported || !tradeUsesBagOfGold(event))
+			return;
+
+		Player player = getPlayer(event);
+		Core.getMessages().debug("Shopkeepers trade uses BagOfGold money items: player=%s",
+				player == null ? "unknown" : player.getName());
+	}
+
+	private void handleTradeCompleted(Event event) {
+		if (!supported)
+			return;
+
+		Object completedTrade = invoke(event, "getCompletedTrade");
+		if (completedTrade == null || !tradeUsesBagOfGold(completedTrade))
+			return;
+
+		Player player = getPlayer(completedTrade);
+		Bukkit.getScheduler().runTask(plugin, () -> syncPlayerBalanceAfterTrade(player));
+	}
+
+	private boolean tradeUsesBagOfGold(Object trade) {
+		return isBagOfGoldMoney(getTradeItem(trade, "getOfferedItem1"))
+				|| isBagOfGoldMoney(getTradeItem(trade, "getOfferedItem2"))
+				|| isBagOfGoldMoney(getTradeItem(trade, "getReceivedItem1"))
+				|| isBagOfGoldMoney(getTradeItem(trade, "getReceivedItem2"))
+				|| isBagOfGoldMoney(getTradeItem(trade, "getResultItem"));
+	}
+
+	private ItemStack getTradeItem(Object trade, String methodName) {
+		Object item = invoke(trade, methodName);
+		if (item == null)
+			return null;
+		if (item instanceof ItemStack)
+			return (ItemStack) item;
+
+		Object copy = invoke(item, "copy");
+		if (copy instanceof ItemStack)
+			return (ItemStack) copy;
+
+		return null;
 	}
 
 	private boolean isBagOfGoldMoney(ItemStack item) {
+		if (item == null)
+			return false;
 		if (!Reward.isReward(item))
 			return false;
 
 		Reward reward = Reward.getReward(item);
 		return reward.isBagOfGoldReward() || reward.isItemReward();
+	}
+
+	private Player getPlayer(Object eventOrTrade) {
+		Object player = invoke(eventOrTrade, "getPlayer");
+		if (player instanceof Player)
+			return (Player) player;
+		return null;
+	}
+
+	private Object invoke(Object target, String methodName) {
+		try {
+			return target.getClass().getMethod(methodName).invoke(target);
+		} catch (Exception e) {
+			if (plugin.getConfigManager().debug)
+				e.printStackTrace();
+			return null;
+		}
 	}
 
 	private void syncPlayerBalanceAfterTrade(Player player) {
@@ -114,33 +235,6 @@ public class ShopkeepersCompat implements Listener {
 		}
 
 		plugin.getRewardManager().adjustPlayerBalanceToAmounOfMoneyInInventory(player, BALANCE_SOURCE_HINT);
-	}
-
-	// **************************************************************************
-	// EVENTS
-	// **************************************************************************
-
-	@EventHandler(priority = EventPriority.MONITOR)
-	public void onShopkeepersStartup(ShopkeepersStartupEvent event) {
-		enableIfShopkeepersApiReady();
-	}
-
-	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-	public void onShopkeeperTrade(ShopkeeperTradeEvent event) {
-		if (!supported || !tradeUsesBagOfGold(event))
-			return;
-
-		Core.getMessages().debug("Shopkeepers trade uses BagOfGold money items: player=%s, shopkeeper=%s",
-				event.getPlayer().getName(), event.getShopkeeper().getIdString());
-	}
-
-	@EventHandler(priority = EventPriority.MONITOR)
-	public void onShopkeeperTradeCompleted(ShopkeeperTradeCompletedEvent event) {
-		if (!supported || !tradeUsesBagOfGold(event.getCompletedTrade()))
-			return;
-
-		Player player = event.getCompletedTrade().getPlayer();
-		Bukkit.getScheduler().runTask(plugin, () -> syncPlayerBalanceAfterTrade(player));
 	}
 
 }
