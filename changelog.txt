@@ -1,3 +1,9 @@
+V4.5.6-JL.13
+* Fixed Shopkeepers physical money payments by preparing exact BagOfGold inputs for selected trades.
+* Blocked unsafe clicks, swaps, and splits on prepared Shopkeepers payment slots to prevent duplicated money.
+* Normalized manual BagOfGold overpayments in Shopkeepers trades and returned change safely.
+* Added optional Shopkeepers integration debug logging.
+
 V4.5.6-JL.11
 * Updated Shopkeepers compatibility to build against the public ShopkeepersAPI 2.28.1 dependency.
 * Replaced raw merchant inventory handling with Shopkeepers trade events.

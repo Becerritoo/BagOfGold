@@ -227,6 +227,9 @@ public class ConfigManager extends AutoConfig {
 			+ "\nThis keeps BagOfGold balances synchronized when Shopkeepers trades move BagOfGold money items.")
 	public boolean enableIntegrationShopkeepersBETA = false;
 
+	@ConfigField(name = "debug", category = "plugins.shopkeepers", comment = "Enable detailed debug information for the Shopkeepers integration.")
+	public boolean debugIntegrationShopkeepers = false;
+
 	@ConfigField(name = "enable-integration-essentials", category = "plugins.essentials", comment = "Enable integration with Essentials"
 			+ "\nhttp://dev.bukkit.org/bukkit-plugins/essentialsx/")
 	public boolean enableIntegrationEssentials = true;

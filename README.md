@@ -16,6 +16,6 @@ Websites - more info
 This branch keeps the upstream BagOfGold 4.5.6 codebase but carries Jarochitoland
 fixes for modern Paper/Towny servers. Fork builds use the `-JL.x` suffix, for
 example `4.5.6-JL.9`, so they are not confused with upstream releases.
-The current fork revision is `4.5.6-JL.12`.
+The current fork revision is `4.5.6-JL.13`.
 
 See `docs/JAROCHITOLAND-FORK.md` for the current fork notes.
