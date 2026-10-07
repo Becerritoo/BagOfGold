@@ -19,7 +19,7 @@
 	</parent>
 
 	<properties>
-		<customitemslib.version>1.1.0-JL.12</customitemslib.version>
+		<customitemslib.version>1.2.0</customitemslib.version>
 		<shopkeepers.version>2.28.1</shopkeepers.version>
 		<!--COPY!!! -->
 		<bossshop.version>1.9.8</bossshop.version>
