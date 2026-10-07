@@ -2,8 +2,8 @@ name: BagOfGold
 main: one.lindegaard.BagOfGold.BagOfGold
 version: ${version}
 description: BagOfGold is an Item based eConomy plugin, which replace Essentials Economy, craftConomy, Gringotts and similar plugins. Your money is in the Bag so be careful that you not loose the bag when you die. You can save some of your money the BagOfGold bank or in a protected chest. 
-dev-url: https://www.spigotmc.org/resources/bagofgold.49332/
-author: Rocologo
+dev-url: https://github.com/Becerritoo/BagOfGold
+authors: [Rocologo, Becerritoo]
 depend: [CustomItemsLib]
 loadbefore: [Towny, MobHunting]
 softdepend: [Reserve, PerWorldInventory, Citizens, Essentials, ProtocolLib, ItemFrameShops, Multiverse-Core, TitleManager]

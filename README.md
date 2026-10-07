@@ -1,21 +1,46 @@
-BagOfGold
-=====================
-* BagOfGold is an economy plugin for Minecraft where the virtual money become physical. You have your money in a bag in the player inventory. This means that you can loose all your money if you don't put them into the bank or hide the bag in a protected chest. 
+# BagOfGold
 
-Websites - more info
--------------------------
-- [Bukkit Dev](http://dev.bukkit.org/bukkit-plugins/bagofgold/)
-- [SpigotMC](https://www.spigotmc.org/resources/mobhunting.3582/)
+BagOfGold is an item-based economy plugin for Minecraft. Money can exist as
+physical items in player inventories, be stored in the bank or be managed through
+Vault-compatible plugins.
+
+This repository is a maintained fork by
+[Becerritoo](https://github.com/Becerritoo). BagOfGold was created by Rocologo,
+who remains credited as the original author.
+
+## Maintained version
+
+The current maintained release is **4.6.0**, validated on Paper 1.21.11 with
+Java 21 and CustomItemsLib 1.2.0. Releases use semantic versioning.
 
 ## Features
-* [Supports Minecraft 1.8 - 1.19.4 upstream; Jarochitoland fork targets Paper 1.21.11]
-* Tested on SpigotMC, PaperSpigot and Craftbukkit 
-* Language support (EN, FR, HU, PT, RU, ZH) 
 
-## Jarochitoland fork
-This branch keeps the upstream BagOfGold 4.5.6 codebase but carries Jarochitoland
-fixes for modern Paper/Towny servers. Fork builds use the `-JL.x` suffix, for
-example `4.5.6-JL.9`, so they are not confused with upstream releases.
-The current fork revision is `4.5.6-JL.13`.
+- Physical item-based currency and bank accounts.
+- Vault economy provider support.
+- Per-world balances and modern Towny virtual-account resolution.
+- Shopkeepers physical-currency trades using the public Shopkeepers API.
+- Optional bounded player debt. Deposits pay debt before crediting physical cash.
+- SQLite and MySQL storage with automatic debt-column migration.
+- English, French, Hungarian, Portuguese, Russian and Chinese language files.
 
-See `docs/JAROCHITOLAND-FORK.md` for the current fork notes.
+## Player debt
+
+Debt is controlled in `plugins/BagOfGold/config.yml`:
+
+```yaml
+economy:
+  enable-player-debt: true
+  maximum-player-debt: 10000.0
+```
+
+The limit applies per player, world group and game mode. Set
+`enable-player-debt` to `false` to retain the traditional insufficient-funds
+behavior.
+
+See [the maintained fork notes](docs/MAINTAINED-FORK.md) for compatibility and
+migration details.
+
+## Original project pages
+
+- [SpigotMC](https://www.spigotmc.org/resources/bagofgold.49332/)
+- [Bukkit Dev](https://dev.bukkit.org/projects/bagofgold)
