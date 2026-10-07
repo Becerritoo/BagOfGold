@@ -31,7 +31,7 @@ import one.lindegaard.CustomItemsLib.compatibility.ActionBarAPICompat;
 import one.lindegaard.CustomItemsLib.compatibility.ActionbarCompat;
 import one.lindegaard.CustomItemsLib.compatibility.BarAPICompat;
 import one.lindegaard.CustomItemsLib.compatibility.BossBarAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.CMICompat;
+import one.lindegaard.CustomItemsLib.compatibility.CMILibCompat;
 import one.lindegaard.CustomItemsLib.compatibility.TitleManagerCompat;
 import one.lindegaard.BagOfGold.compatibility.CitizensCompat;
 import one.lindegaard.BagOfGold.compatibility.PlaceholderAPICompat;
@@ -343,7 +343,7 @@ public class Messages {
 		final String final_message = PlaceholderAPICompat.setPlaceholders(player, message);
 
 		if (TitleManagerCompat.isSupported() || ActionbarCompat.isSupported() || ActionAnnouncerCompat.isSupported()
-				|| ActionBarAPICompat.isSupported() || CMICompat.isSupported()) {
+				|| ActionBarAPICompat.isSupported() || CMILibCompat.isSupported()) {
 			long last = 0L;
 			long time_between_messages = 80L;
 			long delay = 1L, now = System.currentTimeMillis();
@@ -389,8 +389,8 @@ public class Messages {
 			ActionAnnouncerCompat.setMessage(player, message);
 		} else if (ActionBarAPICompat.isSupported()) {
 			ActionBarAPICompat.setMessage(player, message);
-		} else if (CMICompat.isSupported()) {
-			CMICompat.sendActionBarMessage(player, message);
+		} else if (CMILibCompat.isSupported()) {
+			CMILibCompat.sendActionBarMessage(player, message);
 		} else {
 			if (!Core.getPlayerSettingsManager().getPlayerSettings(player).isMuted())
 				player.sendMessage(message);
@@ -428,8 +428,8 @@ public class Messages {
 			BossBarAPICompat.addBar(player, String.format(message, args));
 		} else if (BarAPICompat.isSupported()) {
 			BarAPICompat.setMessageTime(player, String.format(message, args), 5);
-		} else if (CMICompat.isSupported()) {
-			CMICompat.sendBossBarMessage(player, String.format(message, args));
+		} else if (CMILibCompat.isSupported()) {
+			CMILibCompat.sendBossBarMessage(player, String.format(message, args));
 		} else {
 			player.sendMessage(
 					ChatColor.AQUA + getString("bagofgold.learn.prefix") + " " + String.format(message, args));
