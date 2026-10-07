@@ -57,13 +57,13 @@ public class SQLiteDataStore extends DatabaseDataStore {
 			break;
 		case INSERT_PLAYER_BALANCE:
 			mInsertPlayerBalance = connection.prepareStatement(
-					"INSERT OR REPLACE INTO mh_Balance (UUID,WORLDGRP,GAMEMODE,BALANCE,BALANCE_CHANGES,BANK_BALANCE,BANK_BALANCE_CHANGES) "
-							+ "VALUES(?,?,?,?,?,?,?);");
+					"INSERT OR REPLACE INTO mh_Balance (UUID,WORLDGRP,GAMEMODE,BALANCE,BALANCE_CHANGES,BANK_BALANCE,BANK_BALANCE_CHANGES,DEBT) "
+							+ "VALUES(?,?,?,?,?,?,?,?);");
 			break;
 		case GET_TOP25_BALANCE:
 			mTop25Balances = connection.prepareStatement(
-					"select UUID,WORLDGRP,GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE,BANK_BALANCE_CHANGES, "
-							+ "sum(BALANCE + BALANCE_CHANGES + BANK_BALANCE + BANK_BALANCE_CHANGES) AS 'TOTAL'"
+					"select UUID,WORLDGRP,GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE,BANK_BALANCE_CHANGES, DEBT, "
+							+ "sum(BALANCE + BALANCE_CHANGES + BANK_BALANCE + BANK_BALANCE_CHANGES - DEBT) AS 'TOTAL'"
 							+ "FROM mh_Balance "//
 							+ "WHERE WORLDGRP=? AND GAMEMODE=? " //
 							+ "GROUP BY UUID, WORLDGRP, GAMEMODE "//
@@ -169,6 +169,7 @@ public class SQLiteDataStore extends DatabaseDataStore {
 				+ " BALANCE_CHANGES REAL DEFAULT 0," //
 				+ " BANK_BALANCE REAL DEFAULT 0," //
 				+ " BANK_BALANCE_CHANGES REAL DEFAULT 0," //
+				+ " DEBT REAL NOT NULL DEFAULT 0," //
 				+ " UNIQUE(UUID, WORLDGRP, GAMEMODE))");
 
 		create.close();
@@ -249,6 +250,7 @@ public class SQLiteDataStore extends DatabaseDataStore {
 				mInsertPlayerBalance.setDouble(5, Tools.round(playerBalance.getBalanceChanges()));
 				mInsertPlayerBalance.setDouble(6, Tools.round(playerBalance.getBankBalance()));
 				mInsertPlayerBalance.setDouble(7, Tools.round(playerBalance.getBankBalanceChanges()));
+				mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getDebt()));
 				mInsertPlayerBalance.addBatch();
 				mInsertPlayerBalance.executeBatch();
 				mInsertPlayerBalance.close();
@@ -283,6 +285,7 @@ public class SQLiteDataStore extends DatabaseDataStore {
 					mInsertPlayerBalance.setDouble(5, Tools.round(playerBalance.getBalanceChanges()));
 					mInsertPlayerBalance.setDouble(6, Tools.round(playerBalance.getBankBalance()));
 					mInsertPlayerBalance.setDouble(7, Tools.round(playerBalance.getBankBalanceChanges()));
+					mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getDebt()));
 					mInsertPlayerBalance.addBatch();
 				}
 				mInsertPlayerBalance.executeBatch();

@@ -280,7 +280,7 @@ public class BankManager {
 
 		player.spigot()
 				.sendMessage(new ComponentBuilder(plugin.getMessages().getString("bagofgold.banker.balance") + ": "
-						+ plugin.getEconomyManager().format(ps.getBalance() + ps.getBalanceChanges()) + " "
+						+ plugin.getEconomyManager().format(ps.getNetBalance()) + " "
 						+ plugin.getMessages().getString("bagofgold.banker.bankbalance") + ": "
 						+ plugin.getEconomyManager().format(ps.getBankBalance() + ps.getBankBalanceChanges()))
 						.color(ChatColor.GREEN).bold(true).create());

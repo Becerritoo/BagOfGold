@@ -12,6 +12,7 @@ public class PlayerBalance {
 	private GameMode gamemode;
 	private double balance = 0;
 	private double balanceChanges = 0;
+	private double debt = 0;
 	private double bankBalance = 0;
 	private double bankBalanceChanges = 0;
 
@@ -57,6 +58,11 @@ public class PlayerBalance {
 
 	public PlayerBalance(OfflinePlayer player, String worldGroup, GameMode gamemode, double balance,
 			double balanceChanges, double bankBalance, double bankBalanceChanges) {
+		this(player, worldGroup, gamemode, balance, balanceChanges, bankBalance, bankBalanceChanges, 0);
+	}
+
+	public PlayerBalance(OfflinePlayer player, String worldGroup, GameMode gamemode, double balance,
+			double balanceChanges, double bankBalance, double bankBalanceChanges, double debt) {
 		this.player = player;
 		this.worldGroup = worldGroup;
 		this.gamemode = gamemode;
@@ -64,6 +70,7 @@ public class PlayerBalance {
 		this.setBalanceChanges(balanceChanges);
 		this.setBankBalance(bankBalance);
 		this.setBankBalanceChanges(bankBalanceChanges);
+		this.setDebt(debt);
 	}
 
 	public PlayerBalance(OfflinePlayer player, PlayerBalance ps) {
@@ -72,6 +79,7 @@ public class PlayerBalance {
 		this.gamemode = ps.getGamemode();
 		this.setBalance(ps.getBalance());
 		this.setBalanceChanges(ps.getBalanceChanges());
+		this.setDebt(ps.getDebt());
 		this.setBankBalance(ps.getBankBalance());
 		this.setBankBalanceChanges(ps.getBankBalanceChanges());
 	}
@@ -124,8 +132,8 @@ public class PlayerBalance {
 	@Override
 	public String toString() {
 		return String.format(
-				"PlayerBalance: {player: Name:%s, WorldGrp:%s, GameMode:%s, Balance: %s(+%s), BankBalance: %s(+%s)}",
-				player.getName(), worldGroup, gamemode, balance, balanceChanges, bankBalance, bankBalanceChanges);
+				"PlayerBalance: {player: Name:%s, WorldGrp:%s, GameMode:%s, Balance: %s(+%s), Debt: %s, BankBalance: %s(+%s)}",
+				player.getName(), worldGroup, gamemode, balance, balanceChanges, debt, bankBalance, bankBalanceChanges);
 	}
 
 	/**
@@ -152,6 +160,22 @@ public class PlayerBalance {
 
 	public void setBalanceChanges(double balanceChanges) {
 		this.balanceChanges = balanceChanges;
+	}
+
+	public double getDebt() {
+		return debt;
+	}
+
+	public void setDebt(double debt) {
+		this.debt = Math.max(0, debt);
+	}
+
+	public double getCashBalance() {
+		return balance + balanceChanges;
+	}
+
+	public double getNetBalance() {
+		return getCashBalance() - debt;
 	}
 
 	/**
@@ -186,7 +210,7 @@ public class PlayerBalance {
 	 * @return
 	 */
 	public double getTotalWealth() {
-		return balance + balanceChanges + bankBalance + bankBalanceChanges;
+		return balance + balanceChanges + bankBalance + bankBalanceChanges - debt;
 	}
 
 }

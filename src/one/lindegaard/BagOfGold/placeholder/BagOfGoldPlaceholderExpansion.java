@@ -40,7 +40,7 @@ public class BagOfGoldPlaceholderExpansion extends PlaceholderExpansion implemen
 
 		// placeholder: %bagofgold_balance%
 		if (identifier.equals("balance")) {
-			return Tools.format(BagOfGold.getInstance().getPlayerBalanceManager().getPlayerBalance(player).getBalance());
+			return Tools.format(BagOfGold.getInstance().getRewardManager().getBalance(player));
 		}
 
 		// placeholder: %bagofgold_bank_balance%

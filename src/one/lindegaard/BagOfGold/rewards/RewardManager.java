@@ -44,11 +44,39 @@ public class RewardManager {
 	 */
 	public double getBalance(OfflinePlayer offlinePlayer) {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
-		return ps.getBalance() + ps.getBalanceChanges();
+		return total(ps);
 	}
 
-	private double total(PlayerBalance ps) {
+	public double total(PlayerBalance ps) {
+		return cash(ps) - Tools.round(ps.getDebt());
+	}
+
+	public double cash(PlayerBalance ps) {
 		return Tools.round(ps.getBalance()) + Tools.round(ps.getBalanceChanges());
+	}
+
+	public boolean canWithdraw(PlayerBalance ps, double amount) {
+		return DebtPolicy.withdraw(cash(ps), ps.getDebt(), amount,
+				plugin.getConfigManager().enablePlayerDebt, plugin.getConfigManager().maximumPlayerDebt).allowed;
+	}
+
+	public double applyDeposit(PlayerBalance ps, double amount) {
+		DebtPolicy.Deposit result = DebtPolicy.settleDeposit(ps.getDebt(), amount);
+		ps.setDebt(Tools.round(result.debtAfter));
+		ps.setBalance(Tools.round(cash(ps) + result.cashCredit));
+		ps.setBalanceChanges(0);
+		return result.debtPayment;
+	}
+
+	public double applyWithdrawal(PlayerBalance ps, double amount) {
+		DebtPolicy.Withdrawal result = DebtPolicy.withdraw(cash(ps), ps.getDebt(), amount,
+				plugin.getConfigManager().enablePlayerDebt, plugin.getConfigManager().maximumPlayerDebt);
+		if (!result.allowed)
+			return -1;
+		ps.setBalance(Tools.round(result.cashAfter));
+		ps.setBalanceChanges(0);
+		ps.setDebt(Tools.round(result.debtAfter));
+		return result.debtCreated;
 	}
 
 	private void recordBalanceLedger(OfflinePlayer offlinePlayer, double before, double after, String sourceHint) {
@@ -66,16 +94,23 @@ public class RewardManager {
 	 */
 	public boolean setbalance(OfflinePlayer offlinePlayer, double amount) {
 		double bal = getBalance(offlinePlayer);
+		double minimum = plugin.getConfigManager().enablePlayerDebt
+				? -Math.max(0, plugin.getConfigManager().maximumPlayerDebt) : 0;
+		if (amount < minimum)
+			return false;
+		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		if (offlinePlayer.isOnline() && ((Player) offlinePlayer).getGameMode() != GameMode.SPECTATOR) {
-			if (amount >= bal)
-				addMoneyToPlayer((Player) offlinePlayer, amount - bal);
+			double targetCash = Math.max(0, amount);
+			double currentCash = cash(ps);
+			if (targetCash >= currentCash)
+				addMoneyToPlayer((Player) offlinePlayer, targetCash - currentCash);
 			else
-				removeMoneyFromPlayer((Player) offlinePlayer, bal - amount);
-		} else {
-			PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
-			ps.setBalanceChanges(ps.getBalanceChanges() + (amount - bal));
-			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
+				removeMoneyFromPlayer((Player) offlinePlayer, currentCash - targetCash);
 		}
+		ps.setBalance(Tools.round(Math.max(0, amount)));
+		ps.setBalanceChanges(0);
+		ps.setDebt(Tools.round(Math.max(0, -amount)));
+		plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 		recordBalanceLedger(offlinePlayer, bal, amount, "setbalance");
 		return true;
 	}
@@ -92,28 +127,33 @@ public class RewardManager {
 	public boolean depositPlayer(OfflinePlayer offlinePlayer, double amount) {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		double before = total(ps);
-		double drop = 0, give = amount;
+		double drop = 0;
 		if (amount == 0) {
 			return true;
 		} else if (amount > 0) {
+			DebtPolicy.Deposit settlement = DebtPolicy.settleDeposit(ps.getDebt(), amount);
+			double give = settlement.cashCredit;
+			ps.setDebt(Tools.round(settlement.debtAfter));
 			if (offlinePlayer.isOnline()) {
 				Player player = (Player) offlinePlayer;
 				double space = getSpaceForMoney(player);
-				if (amount > space) {
+				if (give > space) {
 					give = space;
-					drop = amount - give;
+					drop = settlement.cashCredit - give;
 				}
 				addMoneyToPlayer(player, Tools.round(ps.getBalanceChanges()) + Tools.round(give));
 				dropMoneyOnGround(player, null, player.getLocation(), drop);
-				ps.setBalance(Tools.round(ps.getBalance() + ps.getBalanceChanges() + give));
+				ps.setBalance(Tools.round(cash(ps) + give));
 				ps.setBalanceChanges(0);
 			} else {
-				ps.setBalanceChanges(Tools.round(ps.getBalanceChanges() + give));
+				ps.setBalance(Tools.round(cash(ps) + give));
+				ps.setBalanceChanges(0);
 			}
 			plugin.getMessages().debug("Deposit %s to %s's account, new balance is %s", Tools.format(give),
 					offlinePlayer.getName(), Tools.format(ps.getBalance() + ps.getBalanceChanges()));
 			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
-			recordBalanceLedger(offlinePlayer, before, total(ps), "depositPlayer");
+			recordBalanceLedger(offlinePlayer, before, total(ps), settlement.debtPayment > 0
+					? "depositPlayer-debt-payment" : "depositPlayer");
 			return true;
 		} else {
 			plugin.getMessages().debug("Could not deposit %s to %s's account, because the number is negative",
@@ -135,17 +175,21 @@ public class RewardManager {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		double before = total(ps);
 		if (amount >= 0) {
-			if (hasMoney(offlinePlayer, amount)) {
+			DebtPolicy.Withdrawal result = DebtPolicy.withdraw(cash(ps), ps.getDebt(), amount,
+					plugin.getConfigManager().enablePlayerDebt, plugin.getConfigManager().maximumPlayerDebt);
+			if (result.allowed) {
 				if (offlinePlayer.isOnline()) {
-					removeMoneyFromPlayer((Player) offlinePlayer, amount + Tools.round(ps.getBalanceChanges()));
-					ps.setBalance(Tools.round(ps.getBalance() + ps.getBalanceChanges() - amount));
-					ps.setBalanceChanges(0);
-				} else
-					ps.setBalanceChanges(Tools.round(ps.getBalanceChanges() - amount));
+					double cashSpent = cash(ps) - result.cashAfter;
+					removeMoneyFromPlayer((Player) offlinePlayer, cashSpent);
+				}
+				ps.setBalance(Tools.round(result.cashAfter));
+				ps.setBalanceChanges(0);
+				ps.setDebt(Tools.round(result.debtAfter));
 				plugin.getMessages().debug("Withdraw %s from %s's account, new balance is %s", Tools.format(amount),
 						offlinePlayer.getName(), Tools.format(ps.getBalance() + ps.getBalanceChanges())); //OK
 				plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
-				recordBalanceLedger(offlinePlayer, before, total(ps), "withdrawPlayer");
+				recordBalanceLedger(offlinePlayer, before, total(ps), result.debtCreated > 0
+						? "withdrawPlayer-debt-created" : "withdrawPlayer");
 	/**			
 				if (offlinePlayer.isOnline() && ((Player) offlinePlayer).isValid()) {
 					Player player = (Player) offlinePlayer;
@@ -165,17 +209,8 @@ public class RewardManager {
 		**/		
 				return true;
 			} else {
-				double remove = Tools.round(ps.getBalance() + ps.getBalanceChanges());
-				plugin.getMessages().debug("%s has not enough bagofgold, Withdrawing only %s , new balance is %s",
-						offlinePlayer.getName(), Tools.format(remove), Tools.format(0));
-				if (remove > 0) {
-					removeMoneyFromPlayer((Player) offlinePlayer, remove);
-					ps.setBalance(0);
-					ps.setBalanceChanges(0);
-					plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
-					recordBalanceLedger(offlinePlayer, before, 0, "withdrawPlayer");
-					return true;
-				}
+				plugin.getMessages().debug("%s cannot withdraw %s because the debt limit would be exceeded",
+						offlinePlayer.getName(), Tools.format(amount));
 				return false;
 			}
 		} else
@@ -193,7 +228,7 @@ public class RewardManager {
 		PlayerBalance pb = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		plugin.getMessages().debug("Check if %s has %s %s on the balance=%s)", offlinePlayer.getName(), Tools.format(amount),
 				Core.getConfigManager().bagOfGoldName, Tools.format(pb.getBalance() + pb.getBalanceChanges()));
-		return Tools.round(pb.getBalance()) + Tools.round(pb.getBalanceChanges()) >= Tools.round(amount);
+		return canWithdraw(pb, amount);
 	}
 
 	/**
@@ -351,10 +386,11 @@ public class RewardManager {
 		plugin.getMessages().debug("Removing %s from %s's balance %s", Tools.format(amount), offlinePlayer.getName(),
 				Tools.format(ps.getBalance() + ps.getBalanceChanges()));
 		if (offlinePlayer.isOnline()) {
-			ps.setBalance(Tools.round(ps.getBalance() + ps.getBalanceChanges() - amount));
+			ps.setBalance(Tools.round(Math.max(0, cash(ps) - amount)));
 			ps.setBalanceChanges(0);
 		} else {
-			ps.setBalanceChanges(Tools.round(ps.getBalanceChanges() - amount));
+			ps.setBalance(Tools.round(Math.max(0, cash(ps) - amount)));
+			ps.setBalanceChanges(0);
 		}
 		plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 	}
@@ -370,12 +406,12 @@ public class RewardManager {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		plugin.getMessages().debug("Adding %s to %s's balance %s", Tools.format(amount), offlinePlayer.getName(),
 				Tools.format(ps.getBalance() + ps.getBalanceChanges()));
-		if (offlinePlayer.isOnline()) {
-			ps.setBalance(Tools.round(ps.getBalance() + ps.getBalanceChanges() + amount));
-			ps.setBalanceChanges(0);
-		} else {
-			ps.setBalance(Tools.round(ps.getBalance() + ps.getBalanceChanges() + amount));
-		}
+		DebtPolicy.Deposit settlement = DebtPolicy.settleDeposit(ps.getDebt(), amount);
+		ps.setDebt(Tools.round(settlement.debtAfter));
+		if (offlinePlayer.isOnline() && settlement.debtPayment > 0)
+			removeMoneyFromPlayer((Player) offlinePlayer, settlement.debtPayment);
+		ps.setBalance(Tools.round(cash(ps) + settlement.cashCredit));
+		ps.setBalanceChanges(0);
 		plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 	}
 

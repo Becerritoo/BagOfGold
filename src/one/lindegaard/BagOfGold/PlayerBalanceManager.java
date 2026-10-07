@@ -206,7 +206,7 @@ public class PlayerBalanceManager implements Listener {
 
 		// update Essentials balance
 		if (EssentialsCompat.isSupported()) {
-			final double balance = getPlayerBalance(player).getBalance();
+			final double balance = getPlayerBalance(player).getNetBalance();
 			Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
 				@Override
 				public void run() {
@@ -365,12 +365,12 @@ public class PlayerBalanceManager implements Listener {
 	public void onPlayerDeathEvent(PlayerDeathEvent event) {
 		Player player = event.getEntity();
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(player);
-		double balanceBefore = ps.getBalance() + ps.getBalanceChanges();
+		double balanceBefore = ps.getNetBalance();
 		ps.setBalance(0);
 		ps.setBalanceChanges(0);
 		setPlayerBalance(player, ps);
 		if (plugin.getBalanceLedgerStore() != null)
-			plugin.getBalanceLedgerStore().record(player, balanceBefore, 0, "death");
+			plugin.getBalanceLedgerStore().record(player, balanceBefore, ps.getNetBalance(), "death");
 		plugin.getMessages().debug("PlayerBalancManager: player died balance=0");
 	}
 
@@ -387,17 +387,14 @@ public class PlayerBalanceManager implements Listener {
 					addInventoryDetails(
 							CoreCustomItems.getPlayerHead(playerBalance.getPlayer().getUniqueId(),
 									playerBalance.getPlayer().getName(), 1,
-									playerBalance.getBalance() + playerBalance.getBalanceChanges()
-											+ playerBalance.getBankBalance() + playerBalance.getBankBalanceChanges()),
+									playerBalance.getTotalWealth()),
 							inventory, n, ChatColor.GREEN + playerBalance.getPlayer().getName(),
 
 							// Lores
 							new String[] { ChatColor.GRAY + "" + ChatColor.ITALIC,
 									ChatColor.valueOf(Core.getConfigManager().rewardTextColor)
 											+ plugin.getMessages().getString("bagofgold.commands.money.top", "total",
-													playerBalance.getBalance() + playerBalance.getBalanceChanges()
-															+ playerBalance.getBankBalance()
-															+ playerBalance.getBankBalanceChanges(),
+											playerBalance.getTotalWealth(),
 													"rewardname", Core.getConfigManager().bagOfGoldName.trim())
 
 									,

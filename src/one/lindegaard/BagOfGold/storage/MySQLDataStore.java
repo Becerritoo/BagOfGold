@@ -75,14 +75,14 @@ public class MySQLDataStore extends DatabaseDataStore {
 			break;
 		case INSERT_PLAYER_BALANCE:
 			mInsertPlayerBalance = connection.prepareStatement(
-					"INSERT INTO mh_Balance (UUID,WORLDGRP,GAMEMODE,BALANCE,BALANCE_CHANGES,BANK_BALANCE,BANK_BALANCE_CHANGES) "
-							+ "VALUES(?,?,?,?,?,?,?) "
-							+ "ON DUPLICATE KEY UPDATE BALANCE=?, BALANCE_CHANGES=?, BANK_BALANCE=?, BANK_BALANCE_CHANGES=?;");
+					"INSERT INTO mh_Balance (UUID,WORLDGRP,GAMEMODE,BALANCE,BALANCE_CHANGES,BANK_BALANCE,BANK_BALANCE_CHANGES,DEBT) "
+							+ "VALUES(?,?,?,?,?,?,?,?) "
+							+ "ON DUPLICATE KEY UPDATE BALANCE=?, BALANCE_CHANGES=?, BANK_BALANCE=?, BANK_BALANCE_CHANGES=?, DEBT=?;");
 			break;
 		case GET_TOP25_BALANCE:
 			mTop25Balances = connection.prepareStatement(
-					"select UUID,WORLDGRP,GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE,BANK_BALANCE_CHANGES, "
-							+ "sum(BALANCE + BALANCE_CHANGES+BANK_BALANCE+BANK_BALANCE_CHANGES) TOTAL "
+					"select UUID,WORLDGRP,GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE,BANK_BALANCE_CHANGES, DEBT, "
+							+ "sum(BALANCE + BALANCE_CHANGES+BANK_BALANCE+BANK_BALANCE_CHANGES-DEBT) TOTAL "
 							+ "FROM mh_Balance "//
 							+ "WHERE WORLDGRP=? AND GAMEMODE=? "//
 							+ "GROUP BY UUID, WORLDGRP, GAMEMODE "//
@@ -236,6 +236,7 @@ public class MySQLDataStore extends DatabaseDataStore {
 				+ " BALANCE_CHANGES REAL NOT NULL DEFAULT 0,"//
 				+ " BANK_BALANCE REAL NOT NULL DEFAULT 0,"//
 				+ " BANK_BALANCE_CHANGES REAL NOT NULL DEFAULT 0,"//
+				+ " DEBT REAL NOT NULL DEFAULT 0,"//
 				+ " PRIMARY KEY (UUID,WORLDGRP,GAMEMODE))");
 
 		create.close();
@@ -316,11 +317,13 @@ public class MySQLDataStore extends DatabaseDataStore {
 				mInsertPlayerBalance.setDouble(5, Tools.round(playerBalance.getBalanceChanges()));
 				mInsertPlayerBalance.setDouble(6, Tools.round(playerBalance.getBankBalance()));
 				mInsertPlayerBalance.setDouble(7, Tools.round(playerBalance.getBankBalanceChanges()));
+				mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getDebt()));
 				// ON DUPLICATE KEY
-				mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getBalance()));
-				mInsertPlayerBalance.setDouble(9, Tools.round(playerBalance.getBalanceChanges()));
-				mInsertPlayerBalance.setDouble(10, Tools.round(playerBalance.getBankBalance()));
-				mInsertPlayerBalance.setDouble(11, Tools.round(playerBalance.getBankBalanceChanges()));
+				mInsertPlayerBalance.setDouble(9, Tools.round(playerBalance.getBalance()));
+				mInsertPlayerBalance.setDouble(10, Tools.round(playerBalance.getBalanceChanges()));
+				mInsertPlayerBalance.setDouble(11, Tools.round(playerBalance.getBankBalance()));
+				mInsertPlayerBalance.setDouble(12, Tools.round(playerBalance.getBankBalanceChanges()));
+				mInsertPlayerBalance.setDouble(13, Tools.round(playerBalance.getDebt()));
 				mInsertPlayerBalance.addBatch();
 				mInsertPlayerBalance.executeBatch();
 				mInsertPlayerBalance.close();
@@ -354,11 +357,13 @@ public class MySQLDataStore extends DatabaseDataStore {
 					mInsertPlayerBalance.setDouble(5, Tools.round(playerBalance.getBalanceChanges()));
 					mInsertPlayerBalance.setDouble(6, Tools.round(playerBalance.getBankBalance()));
 					mInsertPlayerBalance.setDouble(7, Tools.round(playerBalance.getBankBalanceChanges()));
+					mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getDebt()));
 					// ON DUPLICATE KEY
-					mInsertPlayerBalance.setDouble(8, Tools.round(playerBalance.getBalance()));
-					mInsertPlayerBalance.setDouble(9, Tools.round(playerBalance.getBalanceChanges()));
-					mInsertPlayerBalance.setDouble(10, Tools.round(playerBalance.getBankBalance()));
-					mInsertPlayerBalance.setDouble(11, Tools.round(playerBalance.getBankBalanceChanges()));
+					mInsertPlayerBalance.setDouble(9, Tools.round(playerBalance.getBalance()));
+					mInsertPlayerBalance.setDouble(10, Tools.round(playerBalance.getBalanceChanges()));
+					mInsertPlayerBalance.setDouble(11, Tools.round(playerBalance.getBankBalance()));
+					mInsertPlayerBalance.setDouble(12, Tools.round(playerBalance.getBankBalanceChanges()));
+					mInsertPlayerBalance.setDouble(13, Tools.round(playerBalance.getDebt()));
 
 					mInsertPlayerBalance.addBatch();
 				}

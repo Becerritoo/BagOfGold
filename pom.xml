@@ -40,6 +40,7 @@
 	<!-- ********************************************************************** -->
 	<build>
 		<sourceDirectory>${basedir}/src</sourceDirectory>
+		<testSourceDirectory>${basedir}/test</testSourceDirectory>
 		<defaultGoal>clean install</defaultGoal>
 		<resources>
 			<resource>
@@ -281,6 +282,13 @@
 			<artifactId>ShopkeepersAPI</artifactId>
 			<version>${shopkeepers.version}</version>
 			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.13.2</version>
+			<scope>test</scope>
 		</dependency>
 
 	</dependencies>

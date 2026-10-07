@@ -129,6 +129,12 @@ public class ConfigManager extends AutoConfig {
 			+ "\nset this to false")
 	public boolean useBagOfGoldAsAnEconomyPlugin = true;
 
+	@ConfigField(name = "enable-player-debt", category = "economy", comment = "Allow player balances to become negative. Physical money is consumed first and the remaining amount becomes digital debt.")
+	public boolean enablePlayerDebt = true;
+
+	@ConfigField(name = "maximum-player-debt", category = "economy", comment = "Maximum digital debt allowed per player, world group and game mode.")
+	public double maximumPlayerDebt = 10000;
+
 	// @ConfigField(name = "number-format", category = "economy", comment = "Here
 	// you can change the way the numbers is formatted when you use BagOfGold as an
 	// EconomyPlugin.")

@@ -150,6 +150,7 @@ public abstract class DatabaseDataStore implements IDataStore {
 				setupV4Tables(mConnection);
 
 			}
+			ensureDebtColumn(mConnection);
 
 			plugin.getConfigManager().databaseVersion = newest_db_version;
 			plugin.getConfigManager().saveConfig();
@@ -164,6 +165,23 @@ public abstract class DatabaseDataStore implements IDataStore {
 
 		} catch (SQLException e) {
 			throw new DataStoreException(e);
+		}
+	}
+
+	private void ensureDebtColumn(Connection connection) throws SQLException {
+		try (Statement statement = connection.createStatement()) {
+			try (ResultSet result = statement.executeQuery("SELECT DEBT FROM mh_Balance LIMIT 0")) {
+				return;
+			} catch (SQLException missingColumn) {
+				Bukkit.getConsoleSender().sendMessage(ChatColor.GOLD + "[BagOfGold] " + ChatColor.GREEN
+						+ "Adding digital debt support to the balance database.");
+			}
+			statement.executeUpdate("ALTER TABLE mh_Balance ADD COLUMN DEBT REAL NOT NULL DEFAULT 0");
+			statement.executeUpdate("UPDATE mh_Balance SET DEBT = -(BALANCE + BALANCE_CHANGES) "
+					+ "WHERE BALANCE + BALANCE_CHANGES < 0");
+			statement.executeUpdate("UPDATE mh_Balance SET BALANCE = 0, BALANCE_CHANGES = 0 "
+					+ "WHERE BALANCE + BALANCE_CHANGES < 0");
+			connection.commit();
 		}
 	}
 
@@ -216,7 +234,7 @@ public abstract class DatabaseDataStore implements IDataStore {
 	public PlayerBalances loadPlayerBalances(OfflinePlayer offlinePlayer)
 			throws UserNotFoundException, DataStoreException {
 		PlayerBalances playerBalances = new PlayerBalances();
-		String sql = "SELECT WORLDGRP, GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE, BANK_BALANCE_CHANGES "
+		String sql = "SELECT WORLDGRP, GAMEMODE, BALANCE, BALANCE_CHANGES, BANK_BALANCE, BANK_BALANCE_CHANGES, DEBT "
 				+ "FROM mh_Balance WHERE UUID=?";
 		try (Connection mConnection = setupConnection();
 				PreparedStatement statement = mConnection.prepareStatement(sql)) {
@@ -226,7 +244,7 @@ public abstract class DatabaseDataStore implements IDataStore {
 					PlayerBalance ps = new PlayerBalance(offlinePlayer, result.getString("WORLDGRP"),
 							GameMode.getByValue(result.getInt("GAMEMODE")), result.getDouble("BALANCE"),
 							result.getDouble("BALANCE_CHANGES"), result.getDouble("BANK_BALANCE"),
-							result.getDouble("BANK_BALANCE_CHANGES"));
+							result.getDouble("BANK_BALANCE_CHANGES"), result.getDouble("DEBT"));
 					playerBalances.putPlayerBalance(ps);
 				}
 			}
@@ -279,7 +297,7 @@ public abstract class DatabaseDataStore implements IDataStore {
 						ps = new PlayerBalance(offlinePlayer, result.getString("WORLDGRP"),
 								GameMode.getByValue(result.getInt("GAMEMODE")), result.getDouble("BALANCE"),
 								result.getDouble("BALANCE_CHANGES"), result.getDouble("BANK_BALANCE"),
-								result.getDouble("BANK_BALANCE_CHANGES"));
+								result.getDouble("BANK_BALANCE_CHANGES"), result.getDouble("DEBT"));
 					}
 					playerBalances.add(ps);
 				}

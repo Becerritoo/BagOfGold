@@ -35,6 +35,7 @@ public class Top54BalanceRetrieverTask implements IDataStoreTask<List<PlayerBala
 							&& cached.getGamemode() == stat.getGamemode()) {
 						stat.setBalance(cached.getBalance());
 						stat.setBalanceChanges(cached.getBalanceChanges());
+						stat.setDebt(cached.getDebt());
 						stat.setBankBalance(cached.getBankBalance());
 						stat.setBankBalanceChanges(cached.getBankBalanceChanges());
 						found = true;
