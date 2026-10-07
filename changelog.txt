@@ -1,3 +1,8 @@
+V4.6.1
+* Count BagOfGold money stored in carried shulker boxes and bundles as available balance.
+* Spend loose inventory money first, then money inside carried shulker boxes and bundles.
+* Resynchronize balances when portable money containers are picked up, dropped, placed, or put in item frames.
+
 V4.6.0
 * Adopted semantic versioning for the fork maintained by Becerritoo while retaining Rocologo's original-author credit.
 * Added optional bounded player debt with automatic repayment before new cash is credited.

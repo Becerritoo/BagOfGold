@@ -1,5 +1,8 @@
 package one.lindegaard.BagOfGold.rewards;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
@@ -8,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
+import org.bukkit.block.ShulkerBox;
 import org.bukkit.block.Skull;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -17,13 +21,20 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantInventory;
 import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.inventory.meta.BlockStateMeta;
+import org.bukkit.inventory.meta.BundleMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 
 import one.lindegaard.BagOfGold.BagOfGold;
@@ -32,6 +43,7 @@ import one.lindegaard.CustomItemsLib.Tools;
 import one.lindegaard.CustomItemsLib.rewards.CoreCustomItems;
 import one.lindegaard.CustomItemsLib.rewards.Reward;
 import one.lindegaard.CustomItemsLib.rewards.RewardType;
+import one.lindegaard.CustomItemsLib.rewards.TokenSpendStore;
 import one.lindegaard.CustomItemsLib.server.Servers;
 
 public class BagOfGoldItems implements Listener {
@@ -118,25 +130,183 @@ public class BagOfGoldItems implements Listener {
 
 		for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
 			ItemStack is = player.getInventory().getItem(slot);
-
-			if (Reward.isReward(is)) {
-				Reward reward = Reward.getReward(is);
-				int amount = is.getAmount();
-
-				if (reward.checkHash()) {
-					if (reward.isMoney())
-						amountInInventory = amountInInventory + reward.getMoney() * amount;
-				} else {
-					// Hash is wrong
-					Bukkit.getConsoleSender().sendMessage(
-							ChatColor.GOLD + "[BagOfGold]" + ChatColor.RED + "[Warning] " + player.getName()
-									+ " has tried to change the value of a BagOfGold Item. Value set to 0!(3)");
-					reward.setMoney(0);
-					is = Reward.setDisplayNameAndHiddenLores(is, reward);
-				}
-			}
+			amountInInventory += getMoneyInItem(player, is);
+			amountInInventory += getMoneyInPortableContainer(player, is);
 		}
 		return amountInInventory;
+	}
+
+	private double getMoneyInPortableContainer(Player player, ItemStack containerItem) {
+		if (containerItem == null || !containerItem.hasItemMeta())
+			return 0;
+
+		ItemMeta meta = containerItem.getItemMeta();
+		if (meta instanceof BlockStateMeta blockStateMeta
+				&& blockStateMeta.getBlockState() instanceof ShulkerBox shulker)
+			return getMoneyInInventory(player, shulker.getSnapshotInventory());
+
+		if (meta instanceof BundleMeta bundleMeta && bundleMeta.hasItems()) {
+			double amount = 0;
+			for (ItemStack item : bundleMeta.getItems())
+				amount += getMoneyInItem(player, item);
+			return amount;
+		}
+		return 0;
+	}
+
+	private boolean hasMoneyInPortableContainer(Player player, ItemStack item) {
+		return getMoneyInPortableContainer(player, item) > 0;
+	}
+
+	private double getMoneyInInventory(Player player, Inventory inventory) {
+		double amount = 0;
+		for (ItemStack item : inventory.getStorageContents())
+			amount += getMoneyInItem(player, item);
+		return amount;
+	}
+
+	private double getMoneyInItem(Player player, ItemStack item) {
+		if (!Reward.isReward(item))
+			return 0;
+
+		Reward reward = Reward.getReward(item);
+		if (reward.checkHash())
+			return reward.isMoney() ? reward.getMoney() * item.getAmount() : 0;
+
+		Bukkit.getConsoleSender().sendMessage(
+				ChatColor.GOLD + "[BagOfGold]" + ChatColor.RED + "[Warning] " + player.getName()
+						+ " has tried to change the value of a BagOfGold Item. Value set to 0!(3)");
+		reward.setMoney(0);
+		Reward.setDisplayNameAndHiddenLores(item, reward);
+		return 0;
+	}
+
+	public double removeBagOfGoldFromPortableContainers(Player player, double amount) {
+		double remaining = Tools.round(amount);
+		double taken = 0;
+		for (int slot = 0; slot < player.getInventory().getSize() && remaining > 0; slot++) {
+			ItemStack containerItem = player.getInventory().getItem(slot);
+			double removed = removeMoneyFromPortableContainer(player, containerItem, remaining);
+			if (removed <= 0)
+				continue;
+			taken = Tools.round(taken + removed);
+			remaining = Tools.round(remaining - removed);
+			player.getInventory().setItem(slot, containerItem);
+		}
+		return taken;
+	}
+
+	private double removeMoneyFromPortableContainer(Player player, ItemStack containerItem, double amount) {
+		if (containerItem == null || !containerItem.hasItemMeta())
+			return 0;
+
+		ItemMeta meta = containerItem.getItemMeta();
+		if (meta instanceof BlockStateMeta blockStateMeta
+				&& blockStateMeta.getBlockState() instanceof ShulkerBox shulker) {
+			double taken = removeMoneyFromInventory(player, shulker.getSnapshotInventory(), amount);
+			if (taken > 0) {
+				blockStateMeta.setBlockState(shulker);
+				containerItem.setItemMeta(blockStateMeta);
+			}
+			return taken;
+		}
+
+		if (meta instanceof BundleMeta bundleMeta && bundleMeta.hasItems()) {
+			List<ItemStack> contents = new ArrayList<>(bundleMeta.getItems());
+			double taken = removeMoneyFromList(player, contents, amount);
+			if (taken > 0) {
+				contents.removeIf(item -> item == null || item.getType().isAir());
+				bundleMeta.setItems(contents);
+				containerItem.setItemMeta(bundleMeta);
+			}
+			return taken;
+		}
+		return 0;
+	}
+
+	private double removeMoneyFromInventory(Player player, Inventory inventory, double amount) {
+		List<ItemStack> contents = new ArrayList<>(Arrays.asList(inventory.getStorageContents()));
+		double taken = removeMoneyFromList(player, contents, amount);
+		if (taken > 0)
+			inventory.setStorageContents(contents.toArray(new ItemStack[0]));
+		return taken;
+	}
+
+	private void syncPortableMoneyOnNextTick(Player player, String sourceHint) {
+		Bukkit.getScheduler().runTask(plugin, () -> {
+			if (player.isOnline() && player.isValid())
+				plugin.getRewardManager().adjustPlayerBalanceToAmounOfMoneyInInventory(player, sourceHint);
+		});
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onPortableMoneyPickup(EntityPickupItemEvent event) {
+		if (event.getEntity() instanceof Player player
+				&& hasMoneyInPortableContainer(player, event.getItem().getItemStack()))
+			syncPortableMoneyOnNextTick(player, "portable-container-pickup");
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onPortableMoneyDrop(PlayerDropItemEvent event) {
+		Player player = event.getPlayer();
+		if (hasMoneyInPortableContainer(player, event.getItemDrop().getItemStack()))
+			syncPortableMoneyOnNextTick(player, "portable-container-drop");
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onPortableMoneyPlace(BlockPlaceEvent event) {
+		Player player = event.getPlayer();
+		if (hasMoneyInPortableContainer(player, event.getItemInHand()))
+			syncPortableMoneyOnNextTick(player, "portable-container-place");
+	}
+
+	private double removeMoneyFromList(Player player, List<ItemStack> contents, double amount) {
+		double remaining = Tools.round(amount);
+		double taken = 0;
+		for (int slot = contents.size() - 1; slot >= 0 && remaining > 0; slot--) {
+			ItemStack item = contents.get(slot);
+			if (!Reward.isReward(item))
+				continue;
+
+			Reward reward = Reward.getReward(item);
+			if (!reward.checkHash()) {
+				Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING + player.getName()
+						+ " has tried to change the value of a BagOfGold Item. Value set to 0!");
+				reward.setMoney(0);
+				contents.set(slot, Reward.setDisplayNameAndHiddenLores(item, reward));
+				continue;
+			}
+			if (!reward.isMoney())
+				continue;
+
+			double value = Tools.round(reward.getMoney());
+			double consumed = Math.min(value, remaining);
+			TokenSpendStore.MarkResult spendResult = TokenSpendStore.MarkResult.MARKED;
+			if (Core.getTokenSpendStore() != null)
+				spendResult = Core.getTokenSpendStore().markTokenSpent(reward.getTokenUUID(), player.getUniqueId(),
+						"portable-container-spend", consumed);
+			if (spendResult == TokenSpendStore.MarkResult.DUPLICATE) {
+				plugin.getMessages().debug(
+						"Rejected duplicated portable-container token while spending for %s (token=%s).",
+						player.getName(), reward.getTokenUUID());
+				contents.set(slot, null);
+				continue;
+			}
+			if (spendResult == TokenSpendStore.MarkResult.ERROR)
+				plugin.getMessages().debug(
+						"Token spend store unavailable while spending portable-container token for %s. Falling back to signature-only check.",
+						player.getName());
+
+			taken = Tools.round(taken + consumed);
+			remaining = Tools.round(remaining - consumed);
+			if (consumed >= value) {
+				contents.set(slot, null);
+			} else {
+				reward.setMoney(Tools.round(value - consumed));
+				contents.set(slot, Reward.setDisplayNameAndHiddenLores(item, reward));
+			}
+		}
+		return taken;
 	}
 
 	public double getSpaceForBagOfGoldMoney(Player player) {
@@ -180,6 +350,9 @@ public class BagOfGoldItems implements Listener {
 			return;
 
 		Player player = event.getPlayer();
+		if (event.getRightClicked().getType() == EntityType.ITEM_FRAME
+				&& hasMoneyInPortableContainer(player, player.getInventory().getItemInMainHand()))
+			syncPortableMoneyOnNextTick(player, "portable-container-itemframe-place");
 
 		if (event.getRightClicked().getType() == EntityType.ITEM_FRAME
 				&& Reward.isReward(player.getInventory().getItemInMainHand())) {

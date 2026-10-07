@@ -499,8 +499,13 @@ public class RewardManager {
 	 * @return
 	 */
 	public double removeMoneyFromPlayer(Player player, double amount) {
-		if (plugin.getBagOfGoldItems().isBagOfGoldStyle())
-			return Core.getCoreRewardManager().removeBagOfGoldFromPlayer(player, amount);
+		if (plugin.getBagOfGoldItems().isBagOfGoldStyle()) {
+			double taken = Core.getCoreRewardManager().removeBagOfGoldFromPlayer(player, amount);
+			double remaining = Tools.round(amount - taken);
+			if (remaining > 0)
+				taken += plugin.getBagOfGoldItems().removeBagOfGoldFromPortableContainers(player, remaining);
+			return Tools.round(taken);
+		}
 		else if (plugin.getGringottsItems().isGringottsStyle())
 			return plugin.getGringottsItems().removeGringottsMoneyFromPlayer(player, amount);
 		else {
