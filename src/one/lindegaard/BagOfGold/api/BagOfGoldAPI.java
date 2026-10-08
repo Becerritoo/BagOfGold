@@ -105,13 +105,30 @@ public interface BagOfGoldAPI {
 	public void removeMoneyFromPlayerBalance(OfflinePlayer offlinePlayer, double amount);
 
 	/**
-	 * Calculate the total amount of money in the players inventory. Checking all
-	 * Bags (not Mob heads with a value)
+	 * Calculate the total amount of physical money available in the player's
+	 * inventory, including money stored in carried shulker boxes and bundles.
 	 * 
 	 * @param player
 	 * @return
 	 */
 	public double getAmountInInventory(Player player);
+
+	/**
+	 * Calculate the amount of money stored specifically in carried shulker boxes
+	 * and bundles in the player's inventory.
+	 *
+	 * @param player player whose portable containers will be scanned
+	 * @return money stored in carried portable containers
+	 */
+	public double getAmountInPortableContainers(Player player);
+
+	/**
+	 * Check whether the player carries any money inside a shulker box or bundle.
+	 *
+	 * @param player player whose portable containers will be scanned
+	 * @return true when at least one carried portable container contains money
+	 */
+	public boolean hasMoneyInPortableContainers(Player player);
 
 	/**
 	 * Add the amount of money to the players inventory

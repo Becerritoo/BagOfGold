@@ -6,11 +6,13 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.RegisteredServiceProvider;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.citizensnpcs.api.npc.NPC;
 import net.milkbowl.vault.economy.Economy;
 import one.lindegaard.BagOfGold.api.BagOfGoldAPI;
+import one.lindegaard.BagOfGold.api.BagOfGoldImplementAPI;
 import one.lindegaard.BagOfGold.bank.BankManager;
 import one.lindegaard.BagOfGold.bank.BankSign;
 import one.lindegaard.BagOfGold.commands.BankCommand;
@@ -68,6 +70,7 @@ public class BagOfGold extends JavaPlugin {
 	private PlayerBalanceManager mPlayerBalanceManager;
 	private GringottsItems mGringottsItems;
 	private BagOfGoldItems mBagOfGoldItems;
+	private BagOfGoldAPI mAPI;
 
 	private boolean mInitialized = false;
 	public boolean disabling = false;
@@ -215,6 +218,8 @@ public class BagOfGold extends JavaPlugin {
 
 		mGringottsItems = new GringottsItems(this);
 		mBagOfGoldItems = new BagOfGoldItems(this);
+		mAPI = new BagOfGoldImplementAPI(this);
+		getServer().getServicesManager().register(BagOfGoldAPI.class, mAPI, this, ServicePriority.Normal);
 
 		mInitialized = true;
 
@@ -224,8 +229,10 @@ public class BagOfGold extends JavaPlugin {
 	public void onDisable() {
 		disabling = true;
 
-		if (!mInitialized)
+		if (!mInitialized) {
+			plugin = null;
 			return;
+		}
 
 		mBankManager.shutdown();
 		if (mBalanceLedgerStore != null)
@@ -239,6 +246,12 @@ public class BagOfGold extends JavaPlugin {
 		} catch (DataStoreException e) {
 			e.printStackTrace();
 		}
+
+		if (mAPI != null) {
+			getServer().getServicesManager().unregister(BagOfGoldAPI.class, mAPI);
+			mAPI = null;
+		}
+		plugin = null;
 
 		Bukkit.getConsoleSender().sendMessage(PREFIX + "BagOfGold was disabled.");
 	}
@@ -258,7 +271,7 @@ public class BagOfGold extends JavaPlugin {
 	}
 
 	public static BagOfGoldAPI getAPI() {
-		return BagOfGold.getAPI();
+		return plugin == null ? null : plugin.mAPI;
 	}
 
 	public ConfigManager getConfigManager() {

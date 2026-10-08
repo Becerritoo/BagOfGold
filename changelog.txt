@@ -1,3 +1,8 @@
+V4.6.2
+* Fixed the native BagOfGold API accessor and registered the API with Bukkit's ServicesManager.
+* Added native API queries for money stored in carried shulker boxes and bundles.
+* Hardened native money item checks against null, non-reward, and invalid reward items.
+
 V4.6.1
 * Count BagOfGold money stored in carried shulker boxes and bundles as available balance.
 * Spend loose inventory money first, then money inside carried shulker boxes and bundles.

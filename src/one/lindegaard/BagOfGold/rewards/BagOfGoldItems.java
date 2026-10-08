@@ -136,6 +136,13 @@ public class BagOfGoldItems implements Listener {
 		return amountInInventory;
 	}
 
+	public double getAmountInPortableContainers(Player player) {
+		double amount = 0;
+		for (ItemStack item : player.getInventory().getContents())
+			amount += getMoneyInPortableContainer(player, item);
+		return amount;
+	}
+
 	private double getMoneyInPortableContainer(Player player, ItemStack containerItem) {
 		if (containerItem == null || !containerItem.hasItemMeta())
 			return 0;

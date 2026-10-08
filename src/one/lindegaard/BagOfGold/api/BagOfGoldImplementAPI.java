@@ -9,13 +9,19 @@ import one.lindegaard.CustomItemsLib.rewards.Reward;
 
 public class BagOfGoldImplementAPI implements BagOfGoldAPI {
 
-	BagOfGold instance;
+	private final BagOfGold instance;
 
 	/**
-	 * Constructor for MobHuntingAPI
+	 * Creates an API backed by the active BagOfGold instance.
 	 */
 	public BagOfGoldImplementAPI() {
-		this.instance = getBagOfGold();
+		this(BagOfGold.getInstance());
+	}
+
+	public BagOfGoldImplementAPI(BagOfGold instance) {
+		if (instance == null)
+			throw new IllegalStateException("BagOfGold is not enabled");
+		this.instance = instance;
 	}
 
 	/**
@@ -24,7 +30,7 @@ public class BagOfGoldImplementAPI implements BagOfGoldAPI {
 	 * @return Instance
 	 */
 	public BagOfGold getBagOfGold() {
-		return BagOfGold.getInstance();
+		return instance;
 	}
 
 	/**
@@ -34,7 +40,10 @@ public class BagOfGoldImplementAPI implements BagOfGoldAPI {
 	 *         Gringotts item type )
 	 */
 	public boolean isMoney(ItemStack itemStack) {
-		return Reward.getReward(itemStack).isMoney();
+		if (!Reward.isReward(itemStack))
+			return false;
+		Reward reward = Reward.getReward(itemStack);
+		return reward != null && reward.checkHash() && reward.isMoney();
 	}
 
 	/**
@@ -136,14 +145,24 @@ public class BagOfGoldImplementAPI implements BagOfGoldAPI {
 	}
 
 	/**
-	 * Calculate the total amount of money in the players inventory. Checking all
-	 * Bags (not Mob heads with a value)
+	 * Calculate the total amount of physical money available in the player's
+	 * inventory, including money stored in carried shulker boxes and bundles.
 	 * 
 	 * @param player
 	 * @return
 	 */
 	public double getAmountInInventory(Player player) {
 		return getBagOfGold().getRewardManager().getAmountInInventory(player);
+	}
+
+	@Override
+	public double getAmountInPortableContainers(Player player) {
+		return getBagOfGold().getBagOfGoldItems().getAmountInPortableContainers(player);
+	}
+
+	@Override
+	public boolean hasMoneyInPortableContainers(Player player) {
+		return getAmountInPortableContainers(player) > 0;
 	}
 
 	/**

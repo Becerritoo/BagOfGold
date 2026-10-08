@@ -10,7 +10,7 @@ who remains credited as the original author.
 
 ## Maintained version
 
-The current maintained release is **4.6.0**, validated on Paper 1.21.11 with
+The current maintained release is **4.6.2**, validated on Paper 1.21.11 with
 Java 21 and CustomItemsLib 1.2.0. Releases use semantic versioning.
 
 ## Features
@@ -36,6 +36,28 @@ economy:
 The limit applies per player, world group and game mode. Set
 `enable-player-debt` to `false` to retain the traditional insufficient-funds
 behavior.
+
+## Native API
+
+Plugins that declare BagOfGold as a dependency can obtain its native API through
+the static accessor:
+
+```java
+BagOfGoldAPI api = BagOfGold.getAPI();
+double available = api.getAmountInInventory(player);
+double stored = api.getAmountInPortableContainers(player);
+```
+
+The same instance is registered with Bukkit's `ServicesManager`:
+
+```java
+RegisteredServiceProvider<BagOfGoldAPI> registration =
+        Bukkit.getServicesManager().getRegistration(BagOfGoldAPI.class);
+BagOfGoldAPI api = registration == null ? null : registration.getProvider();
+```
+
+`getAmountInInventory` returns all physical money carried by the player,
+including money inside carried shulker boxes and bundles.
 
 See [the maintained fork notes](docs/MAINTAINED-FORK.md) for compatibility and
 migration details.
