@@ -10,7 +10,7 @@ who remains credited as the original author.
 
 ## Maintained version
 
-The current maintained release is **4.6.2**, validated on Paper 1.21.11 with
+The current maintained release is **4.6.3**, validated on Paper 1.21.11 with
 Java 21 and CustomItemsLib 1.2.0. Releases use semantic versioning.
 
 ## Features

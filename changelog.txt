@@ -1,3 +1,7 @@
+V4.6.3
+* Flush pending player balance updates to the database during a clean server shutdown.
+* Prevent recently changed balances from reverting to the previous periodic save after a restart.
+
 V4.6.2
 * Fixed the native BagOfGold API accessor and registered the API with Bukkit's ServicesManager.
 * Added native API queries for money stored in carried shulker boxes and bundles.
