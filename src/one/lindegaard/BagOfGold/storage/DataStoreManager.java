@@ -91,7 +91,7 @@ public class DataStoreManager {
 	 * Flush all waiting data to the database
 	 */
 	public void flush() {
-		if (mWaiting.isEmpty()) {
+		if (!mWaiting.isEmpty()) {
 			plugin.getMessages().debug("Force saving waiting %s data to database...", mWaiting.size());
 			mTaskThread.addTask(new StoreTask(mWaiting), null);
 		}
