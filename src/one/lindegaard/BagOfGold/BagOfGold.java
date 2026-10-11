@@ -13,6 +13,7 @@ import net.citizensnpcs.api.npc.NPC;
 import net.milkbowl.vault.economy.Economy;
 import one.lindegaard.BagOfGold.api.BagOfGoldAPI;
 import one.lindegaard.BagOfGold.api.BagOfGoldImplementAPI;
+import one.lindegaard.BagOfGold.api.BagOfGoldPhysicalCurrencyService;
 import one.lindegaard.BagOfGold.bank.BankManager;
 import one.lindegaard.BagOfGold.bank.BankSign;
 import one.lindegaard.BagOfGold.commands.BankCommand;
@@ -40,6 +41,7 @@ import one.lindegaard.BagOfGold.rewards.BagOfGoldItems;
 import one.lindegaard.BagOfGold.rewards.RewardManager;
 import one.lindegaard.BagOfGold.rewards.GringottsItems;
 import one.lindegaard.CustomItemsLib.compatibility.CompatPlugin;
+import one.lindegaard.CustomItemsLib.api.PhysicalCurrencyService;
 import one.lindegaard.CustomItemsLib.server.Servers;
 import one.lindegaard.CustomItemsLib.storage.DataStoreException;
 import one.lindegaard.BagOfGold.storage.BalanceLedgerStore;
@@ -71,6 +73,7 @@ public class BagOfGold extends JavaPlugin {
 	private GringottsItems mGringottsItems;
 	private BagOfGoldItems mBagOfGoldItems;
 	private BagOfGoldAPI mAPI;
+	private PhysicalCurrencyService mPhysicalCurrencyService;
 
 	private boolean mInitialized = false;
 	public boolean disabling = false;
@@ -220,6 +223,9 @@ public class BagOfGold extends JavaPlugin {
 		mBagOfGoldItems = new BagOfGoldItems(this);
 		mAPI = new BagOfGoldImplementAPI(this);
 		getServer().getServicesManager().register(BagOfGoldAPI.class, mAPI, this, ServicePriority.Normal);
+		mPhysicalCurrencyService = new BagOfGoldPhysicalCurrencyService(this);
+		getServer().getServicesManager().register(PhysicalCurrencyService.class, mPhysicalCurrencyService, this,
+				ServicePriority.Normal);
 
 		mInitialized = true;
 
@@ -250,6 +256,10 @@ public class BagOfGold extends JavaPlugin {
 		if (mAPI != null) {
 			getServer().getServicesManager().unregister(BagOfGoldAPI.class, mAPI);
 			mAPI = null;
+		}
+		if (mPhysicalCurrencyService != null) {
+			getServer().getServicesManager().unregister(PhysicalCurrencyService.class, mPhysicalCurrencyService);
+			mPhysicalCurrencyService = null;
 		}
 		plugin = null;
 
