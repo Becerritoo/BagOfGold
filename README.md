@@ -13,6 +13,10 @@ who remains credited as the original author.
 The current maintained release is **4.6.3**, validated on Paper 1.21.11 with
 Java 21 and CustomItemsLib 1.2.0. Releases use semantic versioning.
 
+Version **4.7.0** is under development on `release/4.7.0` against
+CustomItemsLib 1.3.0. BagOfGold now registers its physical-currency behavior
+through the public CustomItemsLib service contract.
+
 ## Features
 
 - Physical item-based currency and bank accounts.
@@ -55,6 +59,11 @@ RegisteredServiceProvider<BagOfGoldAPI> registration =
         Bukkit.getServicesManager().getRegistration(BagOfGoldAPI.class);
 BagOfGoldAPI api = registration == null ? null : registration.getProvider();
 ```
+
+BagOfGold also registers the `PhysicalCurrencyService` declared by
+CustomItemsLib. This keeps balance accounting, debt behavior and Shopkeepers
+currency policy inside BagOfGold while CustomItemsLib manages generic reward
+items.
 
 `getAmountInInventory` returns all physical money carried by the player,
 including money inside carried shulker boxes and bundles.
