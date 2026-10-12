@@ -1,3 +1,9 @@
+V4.6.4
+* Prevent reconnect reads from overtaking pending player balance writes.
+* Snapshot and flush physical survival balances when players disconnect.
+* Preserve physical money when a stale stored balance is lower instead of consuming bags or portable-container money.
+* Ignore asynchronous balance results from previous player sessions and perform cache cleanup on the server thread.
+
 V4.6.3
 * Flush pending player balance updates to the database during a clean server shutdown.
 * Prevent recently changed balances from reverting to the previous periodic save after a restart.
