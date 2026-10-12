@@ -55,6 +55,7 @@ public class ShopkeepersCompat implements Listener {
 		private final int inventoryId;
 		private int selectedIndex;
 		private final double[] amounts = new double[2];
+		private final boolean[] balanceDebited = new boolean[2];
 
 		private PreparedPaymentState(MerchantInventory inventory, int selectedIndex) {
 			this.inventoryId = System.identityHashCode(inventory);
@@ -453,7 +454,7 @@ public class ShopkeepersCompat implements Listener {
 		event.setCancelled(true);
 		inventory.setItem(slot, paymentItem);
 		event.setCursor(new ItemStack(Material.AIR));
-		recordPreparedPayment(player, inventory, inventory.getSelectedRecipeIndex(), slot, payment.amount);
+		recordPreparedPayment(player, inventory, inventory.getSelectedRecipeIndex(), slot, payment.amount, true);
 
 		double change = Tools.round(provided - payment.amount);
 		double returned = returnMoneyToPlayerAndBalance(player, change);
@@ -480,7 +481,7 @@ public class ShopkeepersCompat implements Listener {
 			return false;
 
 		inventory.setItem(payment.slot, paymentItem);
-		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount);
+		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount, true);
 
 		double change = Tools.round(value - payment.amount);
 		if (change > 0) {
@@ -518,14 +519,14 @@ public class ShopkeepersCompat implements Listener {
 		}
 
 		inventory.setItem(payment.slot, paymentItem);
-		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount);
+		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount, false);
 		shopkeepersDebug("merchant payment prepared from inventory: player=%s slot=%s amount=%s item=%s",
 				player.getName(), payment.slot, Tools.format(payment.amount), describeItem(paymentItem));
 		return true;
 	}
 
 	private void recordPreparedPayment(Player player, MerchantInventory inventory, int selectedIndex, int slot,
-			double amount) {
+			double amount, boolean balanceDebited) {
 		if (player == null || inventory == null || slot < 0 || slot > 1 || amount <= 0)
 			return;
 
@@ -538,6 +539,7 @@ public class ShopkeepersCompat implements Listener {
 
 		state.selectedIndex = selectedIndex;
 		state.amounts[slot] = Tools.round(amount);
+		state.balanceDebited[slot] = balanceDebited;
 	}
 
 	private boolean hasTrackedPreparedPayment(Player player, MerchantInventory inventory, int slot) {
@@ -579,7 +581,8 @@ public class ShopkeepersCompat implements Listener {
 			return false;
 
 		inventory.setItem(payment.slot, paymentItem);
-		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount);
+		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount,
+				state.balanceDebited[payment.slot]);
 		shopkeepersDebug("merchant payment restored from tracked state: player=%s slot=%s amount=%s",
 				player.getName(), payment.slot, Tools.format(payment.amount));
 		return true;
@@ -596,6 +599,7 @@ public class ShopkeepersCompat implements Listener {
 			return;
 
 		state.amounts[slot] = 0;
+		state.balanceDebited[slot] = false;
 		if (state.total() <= 0)
 			preparedPayments.remove(player.getUniqueId());
 	}
@@ -692,16 +696,23 @@ public class ShopkeepersCompat implements Listener {
 			ItemStack item = inventory.getItem(slot);
 			PreparedPaymentState state = getPreparedPaymentState(player, inventory);
 			double trackedAmount = state == null ? 0 : Tools.round(state.amounts[slot]);
+			boolean restoreBalance = state == null || state.balanceDebited[slot];
 			if (!isBagOfGoldMoney(item) && trackedAmount <= 0)
 				continue;
 
 			double amount = Math.max(getMoneyValue(item), trackedAmount);
 			inventory.setItem(slot, null);
-			if (amount > 0)
-				returnMoneyToPlayerAndBalance(player, amount);
+			if (amount > 0) {
+				double returned = plugin.getRewardManager().addMoneyToPlayer(player, Tools.round(amount));
+				if (restoreBalance && Tools.round(returned) > 0)
+					plugin.getRewardManager().addMoneyToPlayerBalance(player, Tools.round(returned));
+				if (Tools.round(returned) < Tools.round(amount))
+					shopkeepersDebug("returned only %s of %s to %s's inventory; the remainder may have been dropped",
+							Tools.format(returned), Tools.format(amount), player.getName());
+			}
 			clearPreparedSlot(player, inventory, slot);
-			shopkeepersDebug("returned prepared payment: player=%s amount=%s",
-					player.getName(), Tools.format(amount));
+			shopkeepersDebug("returned prepared payment: player=%s amount=%s restoreBalance=%s",
+					player.getName(), Tools.format(amount), restoreBalance);
 		}
 	}
 
