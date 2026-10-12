@@ -296,7 +296,7 @@ public class SQLiteDataStore extends DatabaseDataStore {
 
 				plugin.getMessages().debug("PlayerBalances saved.");
 
-				if (cleanCache) {
+				if (cleanCache && plugin.isEnabled()) {
 					Set<PlayerBalance> savedBalances = new LinkedHashSet<PlayerBalance>(playerBalanceSet);
 					Bukkit.getScheduler().runTask(plugin, new Runnable() {
 						@Override
