@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -374,12 +375,19 @@ public class MySQLDataStore extends DatabaseDataStore {
 
 				plugin.getMessages().debug("PlayerBalances saved.");
 
-				if (cleanCache)
-					for (PlayerBalance playerData : playerBalanceSet) {
-						if (plugin.getPlayerBalanceManager().containsKey(playerData.getPlayer())
-								&& !playerData.getPlayer().isOnline())
-							plugin.getPlayerBalanceManager().removePlayerBalance(playerData.getPlayer());
-					}
+				if (cleanCache) {
+					Set<PlayerBalance> savedBalances = new LinkedHashSet<PlayerBalance>(playerBalanceSet);
+					Bukkit.getScheduler().runTask(plugin, new Runnable() {
+						@Override
+						public void run() {
+							for (PlayerBalance playerData : savedBalances) {
+								if (plugin.getPlayerBalanceManager().containsKey(playerData.getPlayer())
+										&& !playerData.getPlayer().isOnline())
+									plugin.getPlayerBalanceManager().removePlayerBalance(playerData.getPlayer());
+							}
+						}
+					});
+				}
 
 			} catch (SQLException e) {
 				rollback(mConnection);

@@ -93,6 +93,8 @@ public class RewardManager {
 	 * @return
 	 */
 	public boolean setbalance(OfflinePlayer offlinePlayer, double amount) {
+		if (offlinePlayer.isOnline() && !plugin.getPlayerBalanceManager().isBalanceReady(offlinePlayer))
+			return false;
 		double bal = getBalance(offlinePlayer);
 		double minimum = plugin.getConfigManager().enablePlayerDebt
 				? -Math.max(0, plugin.getConfigManager().maximumPlayerDebt) : 0;
@@ -125,6 +127,8 @@ public class RewardManager {
 	 *         (Success/failure)
 	 */
 	public boolean depositPlayer(OfflinePlayer offlinePlayer, double amount) {
+		if (offlinePlayer.isOnline() && !plugin.getPlayerBalanceManager().isBalanceReady(offlinePlayer))
+			return false;
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		double before = total(ps);
 		double drop = 0;
@@ -172,6 +176,8 @@ public class RewardManager {
 	 *         (Success/Failure).
 	 */
 	public boolean withdrawPlayer(OfflinePlayer offlinePlayer, double amount) {
+		if (offlinePlayer.isOnline() && !plugin.getPlayerBalanceManager().isBalanceReady(offlinePlayer))
+			return false;
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		double before = total(ps);
 		if (amount >= 0) {
@@ -225,6 +231,8 @@ public class RewardManager {
 	 * @return true if the player has the amount on his money.
 	 */
 	public boolean hasMoney(OfflinePlayer offlinePlayer, double amount) {
+		if (offlinePlayer.isOnline() && !plugin.getPlayerBalanceManager().isBalanceReady(offlinePlayer))
+			return false;
 		PlayerBalance pb = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		plugin.getMessages().debug("Check if %s has %s %s on the balance=%s)", offlinePlayer.getName(), Tools.format(amount),
 				Core.getConfigManager().bagOfGoldName, Tools.format(pb.getBalance() + pb.getBalanceChanges()));
@@ -469,6 +477,72 @@ public class RewardManager {
 		}
 	}
 
+	public double getAmountInInventoryIncludingCursor(Player player) {
+		double amount = getAmountInInventory(player);
+		ItemStack item = player.getItemOnCursor();
+		if (Reward.isReward(item)) {
+			Reward reward = Reward.getReward(item);
+			if (reward.isBagOfGoldReward() || reward.isItemReward())
+				amount += reward.getMoney() * item.getAmount();
+		}
+		return Tools.round(amount);
+	}
+
+	/**
+	 * Reconcile a freshly loaded balance without ever removing physical money from
+	 * a survival player. A larger physical amount is preserved and becomes the new
+	 * stored balance; a larger stored amount is materialized as before.
+	 */
+	public void reconcilePlayerBalanceAfterLoad(Player player) {
+		if (!plugin.getPlayerBalanceManager().isBalanceReady(player)) {
+			return;
+		}
+		if (player.getGameMode() == GameMode.SPECTATOR) {
+			return;
+		}
+		if (player.getGameMode() != GameMode.SURVIVAL) {
+			adjustAmountOfMoneyInInventoryToPlayerBalance(player);
+			return;
+		}
+
+		PlayerBalance balance = plugin.getPlayerBalanceManager().getPlayerBalance(player);
+		double expected = cash(balance);
+		double physical = getAmountInInventoryIncludingCursor(player);
+		double difference = Tools.round(expected - physical);
+		JoinBalancePolicy.Action action = JoinBalancePolicy.decide(Tools.round(expected), Tools.round(physical));
+		if (action == JoinBalancePolicy.Action.MATERIALIZE_STORED_CREDIT) {
+			plugin.getMessages().debug("BALANCE_RECONCILE_CREDIT player=%s uuid=%s amount=%s", player.getName(),
+					player.getUniqueId(), difference);
+			addMoneyToPlayer(player, difference);
+		} else if (action == JoinBalancePolicy.Action.PRESERVE_PHYSICAL_BALANCE) {
+			double before = total(balance);
+			balance.setBalance(physical);
+			balance.setBalanceChanges(0);
+			plugin.getPlayerBalanceManager().setPlayerBalance(player, balance);
+			recordBalanceLedger(player, before, total(balance), "join-reconcile-preserve-inventory");
+			Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING + "BALANCE_RECONCILE_PRESERVED player="
+					+ player.getName() + " uuid=" + player.getUniqueId() + " stored=" + expected + " physical="
+					+ physical);
+		}
+	}
+
+	/**
+	 * Capture the physical balance without adding, removing, or consuming any item.
+	 */
+	public void snapshotPlayerBalanceFromInventory(Player player, String sourceHint) {
+		if (!plugin.getPlayerBalanceManager().isBalanceReady(player)) {
+			return;
+		}
+		PlayerBalance balance = plugin.getPlayerBalanceManager().getPlayerBalance(player);
+		double before = total(balance);
+		double physical = getAmountInInventoryIncludingCursor(player);
+		balance.setBalance(physical);
+		balance.setBalanceChanges(0);
+		plugin.getPlayerBalanceManager().setPlayerBalance(player, balance);
+		if (Tools.round(before) != Tools.round(total(balance)))
+			recordBalanceLedger(player, before, total(balance), sourceHint);
+	}
+
 	/**
 	 * Add amount to the player inventory, but NOT on player balance in
 	 * memory/database.
@@ -567,6 +641,11 @@ public class RewardManager {
 	}
 
 	public void adjustPlayerBalanceToAmounOfMoneyInInventory(Player player, String sourceHint) {
+		if (!plugin.getPlayerBalanceManager().isBalanceReady(player)) {
+			plugin.getMessages().debug("SYNC_SKIPPED_NOT_READY player=%s uuid=%s", player.getName(),
+					player.getUniqueId());
+			return;
+		}
 		double amountInInventory = getAmountInInventory(player);
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(player);
 		ItemStack is = player.getItemOnCursor();

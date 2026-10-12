@@ -29,7 +29,6 @@ import one.lindegaard.CustomItemsLib.storage.DataStoreException;
 import one.lindegaard.CustomItemsLib.storage.IDataCallback;
 import one.lindegaard.CustomItemsLib.Core;
 import one.lindegaard.CustomItemsLib.PlayerSettings;
-import one.lindegaard.CustomItemsLib.Tools;
 import one.lindegaard.CustomItemsLib.rewards.CoreCustomItems;
 import one.lindegaard.CustomItemsLib.storage.UserNotFoundException;
 
@@ -40,6 +39,7 @@ public class PlayerBalanceManager implements Listener {
 	private final Set<UUID> loadingBalances = ConcurrentHashMap.newKeySet();
 	private final Set<UUID> failedBalanceLoads = ConcurrentHashMap.newKeySet();
 	private final ConcurrentHashMap<UUID, Integer> balanceLoadAttempts = new ConcurrentHashMap<UUID, Integer>();
+	private final BalanceSessionTracker balanceSessions = new BalanceSessionTracker();
 	private static final long[] LOAD_RETRY_DELAYS_TICKS = new long[] { 100L, 300L, 600L };
 	private static final int MAX_LOAD_RETRIES = 3;
 
@@ -157,6 +157,9 @@ public class PlayerBalanceManager implements Listener {
 	 * @param offlinePlayer
 	 */
 	public void removePlayerBalance(OfflinePlayer offlinePlayer) {
+		if (offlinePlayer.isOnline()) {
+			return;
+		}
 		plugin.getMessages().debug("Removing %s from player settings cache", offlinePlayer.getName());
 		UUID uuid = offlinePlayer.getUniqueId();
 		mBalances.remove(uuid);
@@ -173,22 +176,9 @@ public class PlayerBalanceManager implements Listener {
 	@EventHandler(priority = EventPriority.HIGHEST)
 	private void onPlayerJoin(PlayerJoinEvent event) {
 		final Player player = event.getPlayer();
-		UUID uuid = player.getUniqueId();
-
-		if (!isBalanceReady(player)) {
-			if (!loadingBalances.contains(uuid)) {
-				loadingBalances.add(uuid);
-				failedBalanceLoads.remove(uuid);
-				balanceLoadAttempts.put(uuid, 0);
-				load(player);
-			}
-			plugin.getMessages().debug("SYNC_SKIPPED_NOT_READY player=%s uuid=%s", player.getName(), uuid);
-			return;
-		}
-
-		if (containsKey(player)) {
-			plugin.getRewardManager().adjustAmountOfMoneyInInventoryToPlayerBalance(player);
-		}
+		load(player);
+		plugin.getMessages().debug("BALANCE_LOAD_STARTED player=%s uuid=%s", player.getName(),
+				player.getUniqueId());
 	}
 
 	/**
@@ -200,12 +190,23 @@ public class PlayerBalanceManager implements Listener {
 	@EventHandler(priority = EventPriority.NORMAL)
 	private void onPlayerQuit(PlayerQuitEvent event) {
 		final Player player = event.getPlayer();
+		UUID uuid = player.getUniqueId();
 		PlayerSettings ps = Core.getPlayerSettingsManager().getPlayerSettings(player);
 		ps.setLastKnownWorldGrp(Core.getWorldGroupManager().getCurrentWorldGroup(player));
 		Core.getPlayerSettingsManager().setPlayerSettings(ps);
 
+		boolean balanceReady = isBalanceReady(player);
+		if (balanceReady && player.getGameMode() == GameMode.SURVIVAL) {
+			plugin.getRewardManager().snapshotPlayerBalanceFromInventory(player, "disconnect-snapshot");
+		}
+		plugin.getDataStoreManager().flushPlayerBalances(player);
+		balanceSessions.invalidate(uuid);
+		loadingBalances.remove(uuid);
+		failedBalanceLoads.remove(uuid);
+		balanceLoadAttempts.remove(uuid);
+
 		// update Essentials balance
-		if (EssentialsCompat.isSupported()) {
+		if (EssentialsCompat.isSupported() && balanceReady) {
 			final double balance = getPlayerBalance(player).getNetBalance();
 			Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
 				@Override
@@ -223,18 +224,25 @@ public class PlayerBalanceManager implements Listener {
 	 */
 	public void load(final OfflinePlayer offlinePlayer) {
 		UUID uuid = offlinePlayer.getUniqueId();
+		long sessionGeneration = balanceSessions.begin(uuid);
+		mBalances.remove(uuid);
 		loadingBalances.add(uuid);
 		failedBalanceLoads.remove(uuid);
 		balanceLoadAttempts.put(uuid, 0);
-		load(offlinePlayer, 0);
+		load(offlinePlayer, 0, sessionGeneration);
 	}
 
-	private void load(final OfflinePlayer offlinePlayer, final int attempt) {
+	private void load(final OfflinePlayer offlinePlayer, final int attempt, final long sessionGeneration) {
 		plugin.getDataStoreManager().requestPlayerBalances(offlinePlayer, new IDataCallback<PlayerBalances>() {
 
 			@Override
 			public void onCompleted(PlayerBalances ps) {
 				final UUID uuid = offlinePlayer.getUniqueId();
+				if (!balanceSessions.isCurrent(uuid, sessionGeneration)) {
+					plugin.getMessages().debug("BALANCE_LOAD_STALE player=%s uuid=%s generation=%s",
+							offlinePlayer.getName(), uuid, sessionGeneration);
+					return;
+				}
 				loadingBalances.remove(uuid);
 				failedBalanceLoads.remove(uuid);
 				balanceLoadAttempts.remove(uuid);
@@ -264,27 +272,14 @@ public class PlayerBalanceManager implements Listener {
 				Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
 					@Override
 					public void run() {
-						if (offlinePlayer.isOnline() && ((Player) offlinePlayer).isValid()) {
+						if (balanceSessions.isCurrent(uuid, sessionGeneration) && offlinePlayer.isOnline()
+								&& ((Player) offlinePlayer).isValid()) {
 							if (!isBalanceReady(offlinePlayer)) {
 								plugin.getMessages().debug("SYNC_SKIPPED_NOT_READY player=%s uuid=%s",
 										offlinePlayer.getName(), offlinePlayer.getUniqueId());
 								return;
 							}
-							double amountInInventory = plugin.getRewardManager()
-									.getAmountInInventory((Player) offlinePlayer);
-							PlayerBalance pb = getPlayerBalance(offlinePlayer);
-							if (Tools.round(amountInInventory) != Tools.round(pb.getBalance())
-									+ Tools.round(pb.getBalanceChanges())) {
-								double change = pb.getBalanceChanges();
-								plugin.getMessages().debug(
-										"Balance was changed while %s was offline. New balance is %s.",
-										offlinePlayer.getName(), pb.getBalance() + change);
-								pb.setBalance(pb.getBalance() + change);
-								pb.setBalanceChanges(0);
-								setPlayerBalance(offlinePlayer, pb);
-								plugin.getRewardManager()
-										.adjustAmountOfMoneyInInventoryToPlayerBalance((Player) offlinePlayer);
-							}
+							plugin.getRewardManager().reconcilePlayerBalanceAfterLoad((Player) offlinePlayer);
 						}
 					}
 				}, 40L);
@@ -294,6 +289,9 @@ public class PlayerBalanceManager implements Listener {
 			@Override
 			public void onError(Throwable error) {
 				final UUID uuid = offlinePlayer.getUniqueId();
+				if (!balanceSessions.isCurrent(uuid, sessionGeneration)) {
+					return;
+				}
 				loadingBalances.remove(uuid);
 				failedBalanceLoads.add(uuid);
 				Bukkit.getConsoleSender().sendMessage(ChatColor.RED + "[BagOfGold][ERROR] Could not load "
@@ -308,12 +306,12 @@ public class PlayerBalanceManager implements Listener {
 					Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
 						@Override
 						public void run() {
-							if (!offlinePlayer.isOnline()) {
+							if (!balanceSessions.isCurrent(uuid, sessionGeneration) || !offlinePlayer.isOnline()) {
 								return;
 							}
 							failedBalanceLoads.remove(uuid);
 							loadingBalances.add(uuid);
-							load(offlinePlayer, nextAttempt);
+							load(offlinePlayer, nextAttempt, sessionGeneration);
 						}
 					}, LOAD_RETRY_DELAYS_TICKS[nextAttempt - 1]);
 				} else {
