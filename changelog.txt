@@ -6,6 +6,13 @@ V4.7.0 (development)
 * Preserve existing physical money metadata, debt behavior and storage formats.
 * Verify startup and clean shutdown with CustomItemsLib 1.3.0 and MobHunting 8.7.0 on Paper 1.21.11.
 
+V4.6.4
+* Prevent reconnect reads from overtaking pending player balance writes.
+* Snapshot and flush physical survival balances when players disconnect.
+* Preserve physical money when a stale stored balance is lower instead of consuming bags or portable-container money.
+* Ignore asynchronous balance results from previous player sessions and perform cache cleanup on the server thread.
+* Added the missing English notification shown when money is dropped with the command.
+
 V4.6.3
 * Flush pending player balance updates to the database during a clean server shutdown.
 * Prevent recently changed balances from reverting to the previous periodic save after a restart.
