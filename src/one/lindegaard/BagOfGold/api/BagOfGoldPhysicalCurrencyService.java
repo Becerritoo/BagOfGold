@@ -40,6 +40,16 @@ public class BagOfGoldPhysicalCurrencyService implements PhysicalCurrencyService
 	}
 
 	@Override
+	public boolean supportsInventoryReconciliation() {
+		return true;
+	}
+
+	@Override
+	public void reconcileInventory(Player player, String sourceHint) {
+		plugin.getRewardManager().adjustPlayerBalanceToAmounOfMoneyInInventory(player, sourceHint);
+	}
+
+	@Override
 	public boolean isAdditionalRewardSlotAllowed(SlotType slotType) {
 		return ShopkeepersCompat.isSupported()
 				&& (slotType == SlotType.CRAFTING || slotType == SlotType.RESULT);
