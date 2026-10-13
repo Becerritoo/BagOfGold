@@ -26,6 +26,7 @@ public class DataStoreManager {
 
 	// Accessed on multiple threads
 	private final LinkedHashSet<Object> mWaiting = new LinkedHashSet<>();
+	private final Object mQueueOrderLock = new Object();
 
 	// Accessed only from these threads
 	private IDataStore mStore;
@@ -60,7 +61,11 @@ public class DataStoreManager {
 	// PlayerBalances
 	// *****************************************************************************
 	public void requestPlayerBalances(OfflinePlayer player, IDataCallback<PlayerBalances> callback) {
-		mTaskThread.addTask(new PlayerBalanceRetrieverTask(player, mWaiting), callback);
+		synchronized (mQueueOrderLock) {
+			// A reconnecting player must never read before their last queued snapshot.
+			mTaskThread.addTask(new StoreTask(mWaiting, player.getUniqueId()), null);
+			mTaskThread.addTask(new PlayerBalanceRetrieverTask(player, mWaiting), callback);
+		}
 	}
 
 	public UUID findPlayerUuidByName(String playerName) throws DataStoreException {
@@ -74,8 +79,19 @@ public class DataStoreManager {
 	 * @param playerSetting
 	 */
 	public void updatePlayerBalance(OfflinePlayer offlinePlayer, PlayerBalance ps) {
-		synchronized (mWaiting) {
-			mWaiting.add(new PlayerBalance(offlinePlayer, ps));
+		synchronized (mQueueOrderLock) {
+			synchronized (mWaiting) {
+				mWaiting.add(new PlayerBalance(offlinePlayer, ps));
+			}
+		}
+	}
+
+	/**
+	 * Queue all currently pending snapshots for one player immediately.
+	 */
+	public void flushPlayerBalances(OfflinePlayer player) {
+		synchronized (mQueueOrderLock) {
+			mTaskThread.addTask(new StoreTask(mWaiting, player.getUniqueId()), null);
 		}
 	}
 
@@ -91,9 +107,11 @@ public class DataStoreManager {
 	 * Flush all waiting data to the database
 	 */
 	public void flush() {
-		if (!mWaiting.isEmpty()) {
-			plugin.getMessages().debug("Force saving waiting %s data to database...", mWaiting.size());
-			mTaskThread.addTask(new StoreTask(mWaiting), null);
+		synchronized (mQueueOrderLock) {
+			if (!mWaiting.isEmpty()) {
+				plugin.getMessages().debug("Force saving waiting %s data to database...", mWaiting.size());
+				mTaskThread.addTask(new StoreTask(mWaiting), null);
+			}
 		}
 	}
 
@@ -161,7 +179,9 @@ public class DataStoreManager {
 							break;
 						}
 					}
-					mTaskThread.addTask(new StoreTask(mWaiting), null);
+					synchronized (mQueueOrderLock) {
+						mTaskThread.addTask(new StoreTask(mWaiting), null);
+					}
 					
 					Thread.sleep((long) mSaveInterval * 50);
 				}
