@@ -48,6 +48,8 @@ import one.lindegaard.CustomItemsLib.server.Servers;
 
 public class BagOfGoldItems implements Listener {
 
+	private static final int MAX_PORTABLE_CONTAINER_DEPTH = 16;
+
 	BagOfGold plugin;
 
 	public BagOfGoldItems(BagOfGold plugin) {
@@ -130,8 +132,7 @@ public class BagOfGoldItems implements Listener {
 
 		for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
 			ItemStack is = player.getInventory().getItem(slot);
-			amountInInventory += getMoneyInItem(player, is);
-			amountInInventory += getMoneyInPortableContainer(player, is);
+			amountInInventory += getMoneyInItemAndPortableContents(player, is, 0);
 		}
 		return amountInInventory;
 	}
@@ -143,19 +144,39 @@ public class BagOfGoldItems implements Listener {
 		return amount;
 	}
 
+	public double getAmountInItemIncludingPortableContents(Player player, ItemStack item) {
+		return Tools.round(getMoneyInItemAndPortableContents(player, item, 0));
+	}
+
 	private double getMoneyInPortableContainer(Player player, ItemStack containerItem) {
+		return getMoneyInPortableContainer(player, containerItem, 0);
+	}
+
+	private double getMoneyInItemAndPortableContents(Player player, ItemStack item, int depth) {
+		if (item == null || item.getType().isAir())
+			return 0;
+
+		double amount = getMoneyInItem(player, item);
+		if (depth < MAX_PORTABLE_CONTAINER_DEPTH)
+			amount += getMoneyInPortableContainer(player, item, depth);
+		return amount;
+	}
+
+	private double getMoneyInPortableContainer(Player player, ItemStack containerItem, int depth) {
+		if (depth >= MAX_PORTABLE_CONTAINER_DEPTH)
+			return 0;
 		if (containerItem == null || !containerItem.hasItemMeta())
 			return 0;
 
 		ItemMeta meta = containerItem.getItemMeta();
 		if (meta instanceof BlockStateMeta blockStateMeta
 				&& blockStateMeta.getBlockState() instanceof ShulkerBox shulker)
-			return getMoneyInInventory(player, shulker.getSnapshotInventory());
+			return getMoneyInInventory(player, shulker.getSnapshotInventory(), depth + 1);
 
 		if (meta instanceof BundleMeta bundleMeta && bundleMeta.hasItems()) {
 			double amount = 0;
 			for (ItemStack item : bundleMeta.getItems())
-				amount += getMoneyInItem(player, item);
+				amount += getMoneyInItemAndPortableContents(player, item, depth + 1);
 			return amount;
 		}
 		return 0;
@@ -165,10 +186,10 @@ public class BagOfGoldItems implements Listener {
 		return getMoneyInPortableContainer(player, item) > 0;
 	}
 
-	private double getMoneyInInventory(Player player, Inventory inventory) {
+	private double getMoneyInInventory(Player player, Inventory inventory, int depth) {
 		double amount = 0;
 		for (ItemStack item : inventory.getStorageContents())
-			amount += getMoneyInItem(player, item);
+			amount += getMoneyInItemAndPortableContents(player, item, depth);
 		return amount;
 	}
 
@@ -193,24 +214,34 @@ public class BagOfGoldItems implements Listener {
 		double taken = 0;
 		for (int slot = 0; slot < player.getInventory().getSize() && remaining > 0; slot++) {
 			ItemStack containerItem = player.getInventory().getItem(slot);
-			double removed = removeMoneyFromPortableContainer(player, containerItem, remaining);
+			double removed = removeMoneyFromPortableContainer(player, containerItem, remaining, 0);
 			if (removed <= 0)
 				continue;
 			taken = Tools.round(taken + removed);
 			remaining = Tools.round(remaining - removed);
 			player.getInventory().setItem(slot, containerItem);
 		}
+		if (remaining > 0) {
+			ItemStack cursorItem = player.getItemOnCursor();
+			double removed = removeMoneyFromPortableContainer(player, cursorItem, remaining, 0);
+			if (removed > 0) {
+				taken = Tools.round(taken + removed);
+				player.setItemOnCursor(cursorItem);
+			}
+		}
 		return taken;
 	}
 
-	private double removeMoneyFromPortableContainer(Player player, ItemStack containerItem, double amount) {
+	private double removeMoneyFromPortableContainer(Player player, ItemStack containerItem, double amount, int depth) {
+		if (depth >= MAX_PORTABLE_CONTAINER_DEPTH)
+			return 0;
 		if (containerItem == null || !containerItem.hasItemMeta())
 			return 0;
 
 		ItemMeta meta = containerItem.getItemMeta();
 		if (meta instanceof BlockStateMeta blockStateMeta
 				&& blockStateMeta.getBlockState() instanceof ShulkerBox shulker) {
-			double taken = removeMoneyFromInventory(player, shulker.getSnapshotInventory(), amount);
+			double taken = removeMoneyFromInventory(player, shulker.getSnapshotInventory(), amount, depth + 1);
 			if (taken > 0) {
 				blockStateMeta.setBlockState(shulker);
 				containerItem.setItemMeta(blockStateMeta);
@@ -220,7 +251,7 @@ public class BagOfGoldItems implements Listener {
 
 		if (meta instanceof BundleMeta bundleMeta && bundleMeta.hasItems()) {
 			List<ItemStack> contents = new ArrayList<>(bundleMeta.getItems());
-			double taken = removeMoneyFromList(player, contents, amount);
+			double taken = removeMoneyFromList(player, contents, amount, depth + 1);
 			if (taken > 0) {
 				contents.removeIf(item -> item == null || item.getType().isAir());
 				bundleMeta.setItems(contents);
@@ -231,9 +262,9 @@ public class BagOfGoldItems implements Listener {
 		return 0;
 	}
 
-	private double removeMoneyFromInventory(Player player, Inventory inventory, double amount) {
+	private double removeMoneyFromInventory(Player player, Inventory inventory, double amount, int depth) {
 		List<ItemStack> contents = new ArrayList<>(Arrays.asList(inventory.getStorageContents()));
-		double taken = removeMoneyFromList(player, contents, amount);
+		double taken = removeMoneyFromList(player, contents, amount, depth);
 		if (taken > 0)
 			inventory.setStorageContents(contents.toArray(new ItemStack[0]));
 		return taken;
@@ -267,13 +298,20 @@ public class BagOfGoldItems implements Listener {
 			syncPortableMoneyOnNextTick(player, "portable-container-place");
 	}
 
-	private double removeMoneyFromList(Player player, List<ItemStack> contents, double amount) {
+	private double removeMoneyFromList(Player player, List<ItemStack> contents, double amount, int depth) {
 		double remaining = Tools.round(amount);
 		double taken = 0;
 		for (int slot = contents.size() - 1; slot >= 0 && remaining > 0; slot--) {
 			ItemStack item = contents.get(slot);
-			if (!Reward.isReward(item))
+			if (!Reward.isReward(item)) {
+				double removed = removeMoneyFromPortableContainer(player, item, remaining, depth);
+				if (removed > 0) {
+					taken = Tools.round(taken + removed);
+					remaining = Tools.round(remaining - removed);
+					contents.set(slot, item);
+				}
 				continue;
+			}
 
 			Reward reward = Reward.getReward(item);
 			if (!reward.checkHash()) {

@@ -480,7 +480,9 @@ public class RewardManager {
 	public double getAmountInInventoryIncludingCursor(Player player) {
 		double amount = getAmountInInventory(player);
 		ItemStack item = player.getItemOnCursor();
-		if (Reward.isReward(item)) {
+		if (plugin.getBagOfGoldItems().isBagOfGoldStyle()) {
+			amount += plugin.getBagOfGoldItems().getAmountInItemIncludingPortableContents(player, item);
+		} else if (Reward.isReward(item)) {
 			Reward reward = Reward.getReward(item);
 			if (reward.isBagOfGoldReward() || reward.isItemReward())
 				amount += reward.getMoney() * item.getAmount();
