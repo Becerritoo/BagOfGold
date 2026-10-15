@@ -291,3 +291,6 @@ mobs.Allay.name=§9Allay
 mobs.Frog.name=§9Frog
 mobs.Tadpole.name=§9Tadpole
 mobs.Warden.name=§9Warden
+bagofgold.shopkeepers.template.created=&aBagOfGold price templates were signed and saved.
+bagofgold.shopkeepers.template.invalid=&cRemoved ${count} invalid BagOfGold price template trade(s).
+bagofgold.shopkeepers.template.no-permission=&cYou do not have permission to create BagOfGold price templates.

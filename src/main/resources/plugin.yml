@@ -55,4 +55,7 @@ permissions:
     default: op
     children:
       bagofgold.cmd: true
+  bagofgold.shopkeepers.template:
+    description: Allows signed BagOfGold price templates to be created in Shopkeepers admin shops.
+    default: op
       

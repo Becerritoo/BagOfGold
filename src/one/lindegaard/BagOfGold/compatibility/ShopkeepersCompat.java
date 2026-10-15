@@ -5,6 +5,7 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,23 +19,27 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.inventory.TradeSelectEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantInventory;
 import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.Plugin;
 
 import one.lindegaard.BagOfGold.BagOfGold;
 import one.lindegaard.CustomItemsLib.Tools;
+import one.lindegaard.CustomItemsLib.api.SignedItemData;
 import one.lindegaard.CustomItemsLib.compatibility.CompatPlugin;
 import one.lindegaard.CustomItemsLib.rewards.Reward;
 
 public class ShopkeepersCompat implements Listener {
 
 	private static final String BALANCE_SOURCE_HINT = "shopkeepers-trade";
+	private static final String PRICE_TEMPLATE_PURPOSE = "bagofgold.shopkeepers.price";
 
 	private static Plugin mPlugin;
 	private static boolean supported = false;
@@ -64,6 +69,26 @@ public class ShopkeepersCompat implements Listener {
 
 		private double total() {
 			return Tools.round(amounts[0] + amounts[1]);
+		}
+	}
+
+	private static class PriceTemplate {
+		private final UUID shopkeeperId;
+		private final double amount;
+
+		private PriceTemplate(UUID shopkeeperId, double amount) {
+			this.shopkeeperId = shopkeeperId;
+			this.amount = amount;
+		}
+	}
+
+	private static class PlaceholderConversion {
+		private final boolean matched;
+		private final ItemStack item;
+
+		private PlaceholderConversion(boolean matched, ItemStack item) {
+			this.matched = matched;
+			this.item = item;
 		}
 	}
 
@@ -182,15 +207,21 @@ public class ShopkeepersCompat implements Listener {
 					"com.nisovin.shopkeepers.api.events.ShopkeeperTradeEvent");
 			Class<? extends Event> tradeCompletedEventClass = (Class<? extends Event>) loadShopkeepersClass(
 					"com.nisovin.shopkeepers.api.events.ShopkeeperTradeCompletedEvent");
+			Class<? extends Event> editedEventClass = (Class<? extends Event>) loadShopkeepersClass(
+					"com.nisovin.shopkeepers.api.events.ShopkeeperEditedEvent");
 
 			registerDynamicEvent(TradeSelectEvent.class, EventPriority.MONITOR,
 					(listener, event) -> handleTradeSelect((TradeSelectEvent) event));
 			registerDynamicEvent(InventoryClickEvent.class, EventPriority.LOWEST,
 					(listener, event) -> handleInventoryClick((InventoryClickEvent) event), false);
+			registerDynamicEvent(InventoryDragEvent.class, EventPriority.LOWEST,
+					(listener, event) -> handleInventoryDrag((InventoryDragEvent) event), false);
 			registerDynamicEvent(InventoryCloseEvent.class, EventPriority.LOWEST,
 					(listener, event) -> handleInventoryClose((InventoryCloseEvent) event));
 			registerDynamicEvent(tradeEventClass, EventPriority.HIGHEST, (listener, event) -> handleTrade(event));
 			registerDynamicEvent(tradeCompletedEventClass, (listener, event) -> handleTradeCompleted(event));
+			registerDynamicEvent(editedEventClass, EventPriority.MONITOR,
+					(listener, event) -> handleShopkeeperEdited(event));
 			tradeListenersRegistered = true;
 			return true;
 		} catch (Exception e) {
@@ -220,8 +251,9 @@ public class ShopkeepersCompat implements Listener {
 			return;
 
 		Player player = getPlayer(event);
-		normalizeBagOfGoldPayment(event, player);
-		clearPreparedPayments(player);
+		if (!normalizeBagOfGoldPayment(event, player))
+			return;
+		addPreparedPaymentTradeEffect(event, player);
 		shopkeepersDebug("trade uses BagOfGold money items: player=%s",
 				player == null ? "unknown" : player.getName());
 	}
@@ -263,6 +295,14 @@ public class ShopkeepersCompat implements Listener {
 
 		Player player = (Player) event.getWhoClicked();
 		MerchantInventory inventory = (MerchantInventory) event.getInventory();
+		if (containsPriceTemplate(event, player)) {
+			event.setCancelled(true);
+			removeUntrackedPriceTemplates(player, inventory);
+			player.updateInventory();
+			shopkeepersDebug("manual price template movement blocked: player=%s action=%s", player.getName(),
+					event.getAction());
+			return;
+		}
 
 		if (event.getRawSlot() == 0 || event.getRawSlot() == 1) {
 			if (hasTrackedPreparedPayment(player, inventory, event.getRawSlot())) {
@@ -303,6 +343,23 @@ public class ShopkeepersCompat implements Listener {
 				describeItem(result), describeItem(inventory.getItem(0)), describeItem(inventory.getItem(1)));
 	}
 
+	private void handleInventoryDrag(InventoryDragEvent event) {
+		if (!supported || event.getView().getType() != InventoryType.MERCHANT
+				|| !(event.getWhoClicked() instanceof Player) || !(event.getInventory() instanceof MerchantInventory))
+			return;
+
+		for (Map.Entry<Integer, ItemStack> entry : event.getNewItems().entrySet()) {
+			if (entry.getKey() <= 1 && isShopkeepersPriceTemplate(entry.getValue())) {
+				event.setCancelled(true);
+				Player player = (Player) event.getWhoClicked();
+				removeUntrackedPriceTemplates(player, (MerchantInventory) event.getInventory());
+				player.updateInventory();
+				shopkeepersDebug("manual price template drag blocked: player=%s", player.getName());
+				return;
+			}
+		}
+	}
+
 	private void handleInventoryClose(InventoryCloseEvent event) {
 		if (!supported || !(event.getPlayer() instanceof Player) || !(event.getInventory() instanceof MerchantInventory))
 			return;
@@ -312,12 +369,70 @@ public class ShopkeepersCompat implements Listener {
 		Bukkit.getScheduler().runTask(plugin, () -> syncPlayerBalanceAfterTrade(player));
 	}
 
+	@SuppressWarnings("unchecked")
+	private void handleShopkeeperEdited(Event event) {
+		Object shopkeeper = invoke(event, "getShopkeeper");
+		Player player = getPlayer(event);
+		if (shopkeeper == null || player == null)
+			return;
+
+		try {
+			Class<?> regularAdminClass = loadShopkeepersClass(
+					"com.nisovin.shopkeepers.api.shopkeeper.admin.regular.RegularAdminShopkeeper");
+			if (!regularAdminClass.isInstance(shopkeeper))
+				return;
+
+			Object uniqueId = invoke(shopkeeper, "getUniqueId");
+			Object offersObject = invoke(shopkeeper, "getOffers");
+			if (!(uniqueId instanceof UUID) || !(offersObject instanceof List<?>))
+				return;
+
+			UUID shopkeeperId = (UUID) uniqueId;
+			List<Object> updatedOffers = new ArrayList<>();
+			boolean changed = false;
+			int rejected = 0;
+			for (Object offer : (List<Object>) offersObject) {
+				ItemStack result = getTradeItem(offer, "getResultItem");
+				ItemStack item1 = getTradeItem(offer, "getItem1");
+				ItemStack item2 = getTradeItem(offer, "getItem2");
+				PlaceholderConversion converted1 = convertPricePlaceholder(item1, shopkeeperId, player);
+				PlaceholderConversion converted2 = convertPricePlaceholder(item2, shopkeeperId, player);
+				if ((converted1.matched && converted1.item == null) || (converted2.matched && converted2.item == null)) {
+					rejected++;
+					changed = true;
+					continue;
+				}
+				if (converted1.matched || converted2.matched)
+					changed = true;
+
+				updatedOffers.add(createTradeOffer(result, converted1.item, converted2.item));
+			}
+
+			if (!changed)
+				return;
+			shopkeeper.getClass().getMethod("setOffers", List.class).invoke(shopkeeper, updatedOffers);
+			invoke(shopkeeper, "saveDelayed");
+			if (rejected > 0) {
+				player.sendMessage(BagOfGold.PREFIX_WARNING + plugin.getMessages()
+						.getString("bagofgold.shopkeepers.template.invalid", "count", rejected));
+			} else {
+				player.sendMessage(BagOfGold.PREFIX + ChatColor.GREEN
+						+ plugin.getMessages().getString("bagofgold.shopkeepers.template.created"));
+			}
+		} catch (Exception exception) {
+			Bukkit.getConsoleSender().sendMessage(
+					BagOfGold.PREFIX_WARNING + "Could not convert Shopkeepers price placeholders.");
+			if (plugin.getConfigManager().debugIntegrationShopkeepers)
+				exception.printStackTrace();
+		}
+	}
+
 	private boolean tradeUsesBagOfGold(Object trade) {
-		return isBagOfGoldMoney(getTradeItem(trade, "getOfferedItem1"))
-				|| isBagOfGoldMoney(getTradeItem(trade, "getOfferedItem2"))
-				|| isBagOfGoldMoney(getTradeItem(trade, "getReceivedItem1"))
-				|| isBagOfGoldMoney(getTradeItem(trade, "getReceivedItem2"))
-				|| isBagOfGoldMoney(getTradeItem(trade, "getResultItem"));
+		return isBagOfGoldPayment(getTradeItem(trade, "getOfferedItem1"))
+				|| isBagOfGoldPayment(getTradeItem(trade, "getOfferedItem2"))
+				|| isBagOfGoldPayment(getTradeItem(trade, "getReceivedItem1"))
+				|| isBagOfGoldPayment(getTradeItem(trade, "getReceivedItem2"))
+				|| isBagOfGoldPayment(getTradeItem(trade, "getResultItem"));
 	}
 
 	private ItemStack getTradeItem(Object trade, String methodName) {
@@ -335,6 +450,14 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private ItemStack createMatchingMoneyItem(ItemStack template, double money) {
+		if (isShopkeepersPriceTemplate(template)) {
+			PriceTemplate priceTemplate = getPriceTemplate(template);
+			if (priceTemplate == null || Tools.round(priceTemplate.amount) != Tools.round(money))
+				return null;
+			ItemStack item = template.clone();
+			item.setAmount(1);
+			return item;
+		}
 		if (!isBagOfGoldMoney(template))
 			return null;
 		if (Tools.round(getMoneyValue(template)) == Tools.round(money)) {
@@ -399,6 +522,12 @@ public class ShopkeepersCompat implements Listener {
 			}
 
 			ItemStack item = inventory.getItem(payment.slot);
+			if (isShopkeepersPriceTemplate(item)) {
+				inventory.setItem(payment.slot, null);
+				shopkeepersDebug("untracked merchant price template removed: player=%s slot=%s", player.getName(),
+						payment.slot);
+				return false;
+			}
 			if (isBagOfGoldMoney(item)) {
 				if (!normalizeMerchantMoneyInput(player, inventory, payment, item, selectedIndex))
 					return false;
@@ -668,7 +797,7 @@ public class ShopkeepersCompat implements Listener {
 		for (int slot = 0; slot < ingredients.size() && slot < 2; slot++) {
 			ItemStack ingredient = ingredients.get(slot);
 			shopkeepersDebug("recipe ingredient: slot=%s item=%s", slot, describeItem(ingredient));
-			if (!isBagOfGoldMoney(ingredient))
+			if (!isBagOfGoldPayment(ingredient))
 				continue;
 
 			double amount = getMoneyValue(ingredient);
@@ -702,10 +831,15 @@ public class ShopkeepersCompat implements Listener {
 			PreparedPaymentState state = getPreparedPaymentState(player, inventory);
 			double trackedAmount = state == null ? 0 : Tools.round(state.amounts[slot]);
 			boolean restoreBalance = state == null || state.balanceDebited[slot];
-			if (!isBagOfGoldMoney(item) && trackedAmount <= 0)
+			boolean priceTemplate = isShopkeepersPriceTemplate(item);
+			if (priceTemplate && trackedAmount <= 0) {
+				inventory.setItem(slot, null);
+				continue;
+			}
+			if (!isBagOfGoldMoney(item) && !priceTemplate && trackedAmount <= 0)
 				continue;
 
-			double amount = Math.max(getMoneyValue(item), trackedAmount);
+			double amount = priceTemplate ? trackedAmount : Math.max(getMoneyValue(item), trackedAmount);
 			inventory.setItem(slot, null);
 			if (amount > 0) {
 				double returned = plugin.getRewardManager().addMoneyToPlayer(player, Tools.round(amount));
@@ -721,50 +855,69 @@ public class ShopkeepersCompat implements Listener {
 		}
 	}
 
-	private void normalizeBagOfGoldPayment(Event event, Player player) {
+	private boolean normalizeBagOfGoldPayment(Event event, Player player) {
 		Object tradingRecipe = invoke(event, "getTradingRecipe");
 		if (tradingRecipe == null)
-			return;
+			return false;
 
 		double change = 0;
-		change += normalizeReceivedMoneyItem(event, "getItem1", "getReceivedItem1", "setReceivedItem1");
-		change += normalizeReceivedMoneyItem(event, "getItem2", "getReceivedItem2", "setReceivedItem2");
+		Double first = normalizeReceivedMoneyItem(event, player, "getItem1", "getReceivedItem1", "setReceivedItem1");
+		Double second = normalizeReceivedMoneyItem(event, player, "getItem2", "getReceivedItem2", "setReceivedItem2");
+		if (first == null || second == null)
+			return false;
+		change += first;
+		change += second;
 		if (Tools.round(change) > 0)
 			addChangeTradeEffect(event, player, Tools.round(change));
+		return true;
 	}
 
-	private double normalizeReceivedMoneyItem(Event event, String recipeMethod, String receivedGetter,
+	private Double normalizeReceivedMoneyItem(Event event, Player player, String recipeMethod, String receivedGetter,
 			String receivedSetter) {
 		Object tradingRecipe = invoke(event, "getTradingRecipe");
 		ItemStack expected = getTradeItem(tradingRecipe, recipeMethod);
 		ItemStack received = getTradeItem(event, receivedGetter);
 
+		PriceTemplate expectedTemplate = getPriceTemplate(expected);
+		if (expectedTemplate != null) {
+			PriceTemplate receivedTemplate = getPriceTemplate(received);
+			UUID shopkeeperId = getShopkeeperId(event);
+			if (receivedTemplate == null || shopkeeperId == null || !shopkeeperId.equals(expectedTemplate.shopkeeperId)
+					|| !shopkeeperId.equals(receivedTemplate.shopkeeperId)
+					|| Tools.round(receivedTemplate.amount) != Tools.round(expectedTemplate.amount)
+					|| !hasPreparedAmount(player, expectedTemplate.amount)) {
+				cancelTrade(event, "This Shopkeepers BagOfGold payment was not prepared by the server.");
+				return null;
+			}
+			return 0D;
+		}
+
 		if (!isBagOfGoldMoney(expected))
-			return 0;
+			return 0D;
 		if (!isBagOfGoldMoney(received)) {
 			cancelTrade(event, "This Shopkeepers trade expected BagOfGold money, but received a different item.");
-			return 0;
+			return null;
 		}
 
 		double expectedValue = getMoneyValue(expected);
 		double receivedValue = getMoneyValue(received);
 		if (expectedValue <= 0 || receivedValue <= 0) {
 			cancelTrade(event, "This Shopkeepers trade contains an invalid BagOfGold money item.");
-			return 0;
+			return null;
 		}
 		if (Tools.round(receivedValue) < Tools.round(expectedValue)) {
 			cancelTrade(event, "This Shopkeepers trade received less BagOfGold money than required.");
-			return 0;
+			return null;
 		}
 
 		double change = Tools.round(receivedValue - expectedValue);
 		if (change <= 0)
-			return 0;
+			return 0D;
 
 		ItemStack normalizedPayment = createMoneyItem(received, expectedValue);
 		if (normalizedPayment == null) {
 			cancelTrade(event, "Could not normalize the BagOfGold payment for this Shopkeepers trade.");
-			return 0;
+			return null;
 		}
 
 		setUnmodifiableItemStack(event, receivedSetter, normalizedPayment);
@@ -772,6 +925,9 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private double getMoneyValue(ItemStack item) {
+		PriceTemplate priceTemplate = getPriceTemplate(item);
+		if (priceTemplate != null)
+			return Tools.round(priceTemplate.amount);
 		if (!isBagOfGoldMoney(item))
 			return 0;
 
@@ -820,6 +976,36 @@ public class ShopkeepersCompat implements Listener {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
+	private void addPreparedPaymentTradeEffect(Event event, Player player) {
+		if (player == null || !preparedPayments.containsKey(player.getUniqueId()))
+			return;
+
+		Object tradeEffects = invoke(event, "getTradeEffects");
+		if (!(tradeEffects instanceof List<?>)) {
+			cancelTrade(event, "Could not protect the prepared BagOfGold payment.");
+			return;
+		}
+
+		try {
+			Class<?> tradeEffectClass = loadShopkeepersClass("com.nisovin.shopkeepers.api.trading.TradeEffect");
+			Object tradeEffect = Proxy.newProxyInstance(mPlugin.getClass().getClassLoader(),
+					new Class<?>[] { tradeEffectClass }, (proxy, method, args) -> {
+						if ("onTradeApplied".equals(method.getName())) {
+							clearPreparedPayments(player);
+						} else if ("onTradeAborted".equals(method.getName())) {
+							Bukkit.getScheduler().runTask(plugin, () -> restoreAbortedPayment(player));
+						}
+						return null;
+					});
+			((List<Object>) tradeEffects).add(tradeEffect);
+		} catch (Exception exception) {
+			cancelTrade(event, "Could not protect the prepared BagOfGold payment.");
+			if (plugin.getConfigManager().debugIntegrationShopkeepers)
+				exception.printStackTrace();
+		}
+	}
+
 	private void returnChange(Player player, double change) {
 		if (player == null || !player.isOnline() || !player.isValid() || change <= 0)
 			return;
@@ -850,6 +1036,138 @@ public class ShopkeepersCompat implements Listener {
 		if (player != null)
 			player.sendMessage(ChatColor.RED + reason);
 		shopkeepersDebug("trade cancelled: %s", reason);
+	}
+
+	private PlaceholderConversion convertPricePlaceholder(ItemStack item, UUID shopkeeperId, Player editor) {
+		PriceTemplate existing = getPriceTemplate(item);
+		if (existing != null) {
+			return new PlaceholderConversion(true, createPriceTemplate(shopkeeperId, existing.amount));
+		}
+		if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta())
+			return new PlaceholderConversion(false, item);
+
+		ItemMeta meta = item.getItemMeta();
+		if (!meta.hasDisplayName())
+			return new PlaceholderConversion(false, item);
+		String displayName = ChatColor.stripColor(meta.getDisplayName());
+		if (displayName == null)
+			return new PlaceholderConversion(false, item);
+		displayName = displayName.trim();
+		if (!displayName.toLowerCase(Locale.ROOT).startsWith("bagofgold"))
+			return new PlaceholderConversion(false, item);
+		if (!editor.hasPermission("bagofgold.shopkeepers.template")) {
+			editor.sendMessage(BagOfGold.PREFIX_WARNING
+					+ plugin.getMessages().getString("bagofgold.shopkeepers.template.no-permission"));
+			return new PlaceholderConversion(true, null);
+		}
+
+		Double amount = ShopkeepersPriceParser.parse(displayName);
+		if (amount == null)
+			return new PlaceholderConversion(true, null);
+		return new PlaceholderConversion(true, createPriceTemplate(shopkeeperId, amount));
+	}
+
+	private ItemStack createPriceTemplate(UUID shopkeeperId, double amount) {
+		ItemStack template = new ItemStack(Material.PAPER);
+		ItemMeta meta = template.getItemMeta();
+		meta.setDisplayName(ChatColor.GOLD + "BagOfGold price: " + Tools.format(amount));
+		meta.setLore(List.of(ChatColor.DARK_GRAY + "Signed Shopkeepers price template"));
+		template.setItemMeta(meta);
+		String payload = shopkeeperId + "|" + Double.toString(Tools.round(amount));
+		return SignedItemData.sign(template, PRICE_TEMPLATE_PURPOSE, payload);
+	}
+
+	private PriceTemplate getPriceTemplate(ItemStack item) {
+		SignedItemData data;
+		try {
+			data = SignedItemData.readVerified(item, PRICE_TEMPLATE_PURPOSE);
+		} catch (IllegalStateException exception) {
+			return null;
+		}
+		if (data == null)
+			return null;
+
+		String[] parts = data.getPayload().split("\\|", 2);
+		if (parts.length != 2)
+			return null;
+		try {
+			UUID shopkeeperId = UUID.fromString(parts[0]);
+			double amount = Tools.round(Double.parseDouble(parts[1]));
+			if (!ShopkeepersPriceParser.isValidAmount(amount) || item.getAmount() != 1)
+				return null;
+			return new PriceTemplate(shopkeeperId, amount);
+		} catch (IllegalArgumentException exception) {
+			return null;
+		}
+	}
+
+	private Object createTradeOffer(ItemStack result, ItemStack item1, ItemStack item2) throws Exception {
+		Class<?> tradeOfferClass = loadShopkeepersClass(
+				"com.nisovin.shopkeepers.api.shopkeeper.offers.TradeOffer");
+		return tradeOfferClass.getMethod("create", ItemStack.class, ItemStack.class, ItemStack.class)
+				.invoke(null, result, item1, item2);
+	}
+
+	private boolean containsPriceTemplate(InventoryClickEvent event, Player player) {
+		if (isShopkeepersPriceTemplate(event.getCursor()) || isShopkeepersPriceTemplate(event.getCurrentItem()))
+			return true;
+		int hotbarButton = event.getHotbarButton();
+		return hotbarButton >= 0 && hotbarButton < player.getInventory().getSize()
+				&& isShopkeepersPriceTemplate(player.getInventory().getItem(hotbarButton));
+	}
+
+	private void removeUntrackedPriceTemplates(Player player, MerchantInventory inventory) {
+		for (int slot = 0; slot <= 1; slot++) {
+			if (isShopkeepersPriceTemplate(inventory.getItem(slot))
+					&& !hasTrackedPreparedPayment(player, inventory, slot))
+				inventory.setItem(slot, null);
+		}
+	}
+
+	private boolean hasPreparedAmount(Player player, double amount) {
+		MerchantInventory inventory = getOpenMerchantInventory(player);
+		PreparedPaymentState state = getPreparedPaymentState(player, inventory);
+		if (state == null)
+			return false;
+		for (double prepared : state.amounts) {
+			if (Tools.round(prepared) == Tools.round(amount))
+				return true;
+		}
+		return false;
+	}
+
+	private UUID getShopkeeperId(Event event) {
+		Object shopkeeper = invoke(event, "getShopkeeper");
+		Object uniqueId = invoke(shopkeeper, "getUniqueId");
+		return uniqueId instanceof UUID ? (UUID) uniqueId : null;
+	}
+
+	private MerchantInventory getOpenMerchantInventory(Player player) {
+		if (player == null || player.getOpenInventory() == null
+				|| !(player.getOpenInventory().getTopInventory() instanceof MerchantInventory))
+			return null;
+		return (MerchantInventory) player.getOpenInventory().getTopInventory();
+	}
+
+	private void restoreAbortedPayment(Player player) {
+		MerchantInventory inventory = getOpenMerchantInventory(player);
+		if (inventory != null) {
+			returnPreparedMoney(player, inventory);
+			player.updateInventory();
+			return;
+		}
+
+		PreparedPaymentState state = preparedPayments.remove(player.getUniqueId());
+		if (state != null && state.total() > 0)
+			returnMoneyToPlayer(player, state.total());
+	}
+
+	private boolean isBagOfGoldPayment(ItemStack item) {
+		return isBagOfGoldMoney(item) || isShopkeepersPriceTemplate(item);
+	}
+
+	private boolean isShopkeepersPriceTemplate(ItemStack item) {
+		return getPriceTemplate(item) != null;
 	}
 
 	private boolean isBagOfGoldMoney(ItemStack item) {
