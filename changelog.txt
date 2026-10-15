@@ -1,4 +1,4 @@
-V4.7.0 (development)
+V4.7.0 (2026-10-15)
 * Update the required CustomItemsLib version to 1.3.0.
 * Register BagOfGold physical-currency accounting through Bukkit's ServicesManager.
 * Keep inventory credits, balance changes and Shopkeepers slot policy owned by BagOfGold.

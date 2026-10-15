@@ -6,7 +6,7 @@ dev-url: https://github.com/Becerritoo/BagOfGold
 authors: [Rocologo, Becerritoo]
 depend: [CustomItemsLib]
 loadbefore: [Towny, MobHunting]
-softdepend: [Reserve, PerWorldInventory, Citizens, Essentials, ProtocolLib, ItemFrameShops, Multiverse-Core, TitleManager]
+softdepend: [Reserve, PerWorldInventory, Citizens, Essentials, ProtocolLib, ItemFrameShops, Multiverse-Core]
 api-version: 1.21
 
 commands:

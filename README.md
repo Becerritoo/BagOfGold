@@ -10,12 +10,10 @@ who remains credited as the original author.
 
 ## Maintained version
 
-The current maintained release is **4.6.4**, validated on Paper 1.21.11 with
-Java 21 and CustomItemsLib 1.2.0. Releases use semantic versioning.
-
-Version **4.7.0** is under development on `release/4.7.0` against
-CustomItemsLib 1.3.0. BagOfGold now registers its physical-currency behavior
-through the public CustomItemsLib service contract.
+The current maintained release is **4.7.0**, validated on Paper 1.21.11 with
+Java 21 and CustomItemsLib 1.3.0. Releases use semantic versioning. BagOfGold
+registers its physical-currency behavior through the public CustomItemsLib
+service contract.
 
 ## Features
 
