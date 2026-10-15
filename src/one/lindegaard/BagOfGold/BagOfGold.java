@@ -49,7 +49,7 @@ import one.lindegaard.BagOfGold.storage.DataStoreManager;
 import one.lindegaard.BagOfGold.storage.IDataStore;
 import one.lindegaard.BagOfGold.storage.MySQLDataStore;
 import one.lindegaard.BagOfGold.storage.SQLiteDataStore;
-import one.lindegaard.BagOfGold.update.SpigetUpdater;
+import one.lindegaard.BagOfGold.update.HangarUpdater;
 
 public class BagOfGold extends JavaPlugin {
 
@@ -68,7 +68,7 @@ public class BagOfGold extends JavaPlugin {
 	private RewardManager mRewardManager;
 	private CompatibilityManager mCompatibilityManager;
 	private BankManager mBankManager;
-	private SpigetUpdater mSpigetUpdater;
+	private HangarUpdater mHangarUpdater;
 	private PlayerBalanceManager mPlayerBalanceManager;
 	private GringottsItems mGringottsItems;
 	private BagOfGoldItems mBagOfGoldItems;
@@ -127,8 +127,8 @@ public class BagOfGold extends JavaPlugin {
 			}
 		}
 
-		mSpigetUpdater = new SpigetUpdater(this);
-		mSpigetUpdater.setCurrentJarFile(this.getFile().getName());
+		mHangarUpdater = new HangarUpdater(this);
+		mHangarUpdater.setCurrentJarFile(this.getFile().getName());
 
 		// Register commands
 		mCommandDispatcher = new CommandDispatcher(this, "bagofgold",
@@ -149,7 +149,7 @@ public class BagOfGold extends JavaPlugin {
 		mCommandDispatcher.registerCommand(new TokenCommand(this));
 
 		// Check for new BagOfGold updates
-		mSpigetUpdater.hourlyUpdateCheck(getServer().getConsoleSender(), mConfig.updateCheck, false);
+		mHangarUpdater.hourlyUpdateCheck(getServer().getConsoleSender(), mConfig.updateCheck, false);
 
 		if (mConfig.databaseType.equalsIgnoreCase("mysql"))
 			mStore = new MySQLDataStore(this);
@@ -357,8 +357,8 @@ public class BagOfGold extends JavaPlugin {
 		return mCompatibilityManager;
 	}
 
-	public SpigetUpdater getSpigetUpdater() {
-		return mSpigetUpdater;
+	public HangarUpdater getHangarUpdater() {
+		return mHangarUpdater;
 	}
 
 	public PlayerBalanceManager getPlayerBalanceManager() {
