@@ -11,19 +11,12 @@ import org.bstats.charts.AdvancedPie;
 import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 
-import one.lindegaard.CustomItemsLib.compatibility.ActionAnnouncerCompat;
-import one.lindegaard.CustomItemsLib.compatibility.ActionBarAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.ActionbarCompat;
-import one.lindegaard.CustomItemsLib.compatibility.BarAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.BossBarAPICompat;
 import one.lindegaard.CustomItemsLib.compatibility.CMICompat;
 import one.lindegaard.BagOfGold.compatibility.CitizensCompat;
 import one.lindegaard.BagOfGold.compatibility.EssentialsCompat;
 import one.lindegaard.BagOfGold.compatibility.PerWorldInventoryCompat;
 import one.lindegaard.BagOfGold.compatibility.PlaceholderAPICompat;
 import one.lindegaard.CustomItemsLib.compatibility.ProtocolLibCompat;
-import one.lindegaard.CustomItemsLib.compatibility.TitleAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.TitleManagerCompat;
 import one.lindegaard.CustomItemsLib.Core;
 import one.lindegaard.CustomItemsLib.HttpTools;
 import one.lindegaard.CustomItemsLib.HttpTools.httpCallback;
@@ -96,17 +89,7 @@ public class MetricsManager {
 			@Override
 			public Map<String, Integer> call() throws Exception {
 				Map<String, Integer> valueMap = new HashMap<>();
-				//actionbar
-				valueMap.put("TitleAPI", TitleAPICompat.isSupported() ? 1 : 0);
-				valueMap.put("TitleManager", TitleManagerCompat.isSupported() ? 1 : 0);
-				valueMap.put("ActionBar", ActionbarCompat.isSupported() ? 1 : 0);
-				valueMap.put("ActionBarAPI", ActionBarAPICompat.isSupported() ? 1 : 0);
-				valueMap.put("ActionAnnouncer", ActionAnnouncerCompat.isSupported() ? 1 : 0);
 				valueMap.put("CMI", CMICompat.isSupported() ? 1 : 0);
-				//bossbar
-				valueMap.put("BarAPI", BarAPICompat.isSupported() ? 1 : 0);
-				valueMap.put("BossBarAPI", BossBarAPICompat.isSupported() ? 1 : 0);
-				//Placeholder
 				valueMap.put("PlaceholderAPI", PlaceholderAPICompat.isSupported() ? 1 : 0);
 				return valueMap;
 			}

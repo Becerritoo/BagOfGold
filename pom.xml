@@ -154,40 +154,6 @@
 			<version>${worldedit.version}</version>
 		</dependency>
 
-		<!-- BossBarAPI -->
-		<dependency>
-			<groupId>org.inventivetalent</groupId>
-			<artifactId>bossbarapi</artifactId>
-			<version>${bossbarapi.version}</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>metrics-lite</artifactId>
-					<groupId>org.mcstats.bukkit</groupId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-
-		<!-- BarAPI -->
-		<dependency>
-			<groupId>me.confuser</groupId>
-			<artifactId>BarAPI</artifactId>
-			<version>${barapi.version}</version>
-		</dependency>
-
-		<!-- TitleManager 		-->
-		<dependency>
-			<groupId>io.puharesource.mc.titlemanager</groupId>
-			<artifactId>TitleManager</artifactId>
-			<version>${titlemanager.version}</version>
-		</dependency>
-
-		<!-- TitleAPI, ActionBarAPI -->
-		<dependency>
-			<groupId>com.github.ConnorLinfoot</groupId>
-			<artifactId>TitleAPI</artifactId>
-			<version>${TitleAPI.version}</version>
-		</dependency>
-
 		<!-- CMI -->
 		<dependency>
 			<groupId>com.Zrips.CMI</groupId>
@@ -206,20 +172,6 @@
 			<artifactId>EssentialsX</artifactId>
 			<version>${EssentialsX.version}</version>
 			<scope>provided</scope>
-		</dependency>
-
-		<!-- ActionBarAPI -->
-		<dependency>
-			<groupId>com.github.ConnorLinfoot</groupId>
-			<artifactId>ActionBarAPI</artifactId>
-			<version>${ActionBarAPI.version}</version>
-		</dependency>
-
-		<!-- ActionAnnouncer -->
-		<dependency>
-			<groupId>me.clip.actionannouncer</groupId>
-			<artifactId>ActionAnnouncer</artifactId>
-			<version>${ActionAnnouncer.version}</version>
 		</dependency>
 
 		<!-- bStats.org -->

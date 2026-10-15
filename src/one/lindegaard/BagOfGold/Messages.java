@@ -26,13 +26,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import one.lindegaard.CustomItemsLib.compatibility.ActionAnnouncerCompat;
-import one.lindegaard.CustomItemsLib.compatibility.ActionBarAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.ActionbarCompat;
-import one.lindegaard.CustomItemsLib.compatibility.BarAPICompat;
-import one.lindegaard.CustomItemsLib.compatibility.BossBarAPICompat;
 import one.lindegaard.CustomItemsLib.compatibility.CMILibCompat;
-import one.lindegaard.CustomItemsLib.compatibility.TitleManagerCompat;
 import one.lindegaard.BagOfGold.compatibility.CitizensCompat;
 import one.lindegaard.BagOfGold.compatibility.PlaceholderAPICompat;
 import one.lindegaard.CustomItemsLib.Core;
@@ -342,8 +336,7 @@ public class Messages {
 
 		final String final_message = PlaceholderAPICompat.setPlaceholders(player, message);
 
-		if (TitleManagerCompat.isSupported() || ActionbarCompat.isSupported() || ActionAnnouncerCompat.isSupported()
-				|| ActionBarAPICompat.isSupported() || CMILibCompat.isSupported()) {
+		if (CMILibCompat.isSupported()) {
 			long last = 0L;
 			long time_between_messages = 80L;
 			long delay = 1L, now = System.currentTimeMillis();
@@ -381,15 +374,7 @@ public class Messages {
 			return;
 
 		message = Strings.convertColors(PlaceholderAPICompat.setPlaceholders(player, message));
-		if (TitleManagerCompat.isSupported()) {
-			TitleManagerCompat.setActionBar(player, message);
-		} else if (ActionbarCompat.isSupported()) {
-			ActionbarCompat.setMessage(player, message);
-		} else if (ActionAnnouncerCompat.isSupported()) {
-			ActionAnnouncerCompat.setMessage(player, message);
-		} else if (ActionBarAPICompat.isSupported()) {
-			ActionBarAPICompat.setMessage(player, message);
-		} else if (CMILibCompat.isSupported()) {
+		if (CMILibCompat.isSupported()) {
 			CMILibCompat.sendActionBarMessage(player, message);
 		} else {
 			if (!Core.getPlayerSettingsManager().getPlayerSettings(player).isMuted())
@@ -424,11 +409,7 @@ public class Messages {
 
 		message = Strings.convertColors(PlaceholderAPICompat.setPlaceholders(player, message));
 
-		if (BossBarAPICompat.isSupported()) {
-			BossBarAPICompat.addBar(player, String.format(message, args));
-		} else if (BarAPICompat.isSupported()) {
-			BarAPICompat.setMessageTime(player, String.format(message, args), 5);
-		} else if (CMILibCompat.isSupported()) {
+		if (CMILibCompat.isSupported()) {
 			CMILibCompat.sendBossBarMessage(player, String.format(message, args));
 		} else {
 			player.sendMessage(
