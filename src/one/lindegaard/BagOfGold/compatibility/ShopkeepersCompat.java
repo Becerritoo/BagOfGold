@@ -454,10 +454,10 @@ public class ShopkeepersCompat implements Listener {
 		event.setCancelled(true);
 		inventory.setItem(slot, paymentItem);
 		event.setCursor(new ItemStack(Material.AIR));
-		recordPreparedPayment(player, inventory, inventory.getSelectedRecipeIndex(), slot, payment.amount, true);
+		recordPreparedPayment(player, inventory, inventory.getSelectedRecipeIndex(), slot, payment.amount, false);
 
 		double change = Tools.round(provided - payment.amount);
-		double returned = returnMoneyToPlayerAndBalance(player, change);
+		double returned = returnMoneyToPlayer(player, change);
 
 		inventory.setItem(2, recipe.getResult().clone());
 		player.updateInventory();
@@ -481,11 +481,11 @@ public class ShopkeepersCompat implements Listener {
 			return false;
 
 		inventory.setItem(payment.slot, paymentItem);
-		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount, true);
+		recordPreparedPayment(player, inventory, selectedIndex, payment.slot, payment.amount, false);
 
 		double change = Tools.round(value - payment.amount);
 		if (change > 0) {
-			double returned = returnMoneyToPlayerAndBalance(player, change);
+			double returned = returnMoneyToPlayer(player, change);
 			shopkeepersDebug("merchant payment normalized with change: player=%s slot=%s required=%s provided=%s change=%s",
 					player.getName(), payment.slot, Tools.format(payment.amount), Tools.format(value),
 					Tools.format(returned));
@@ -630,12 +630,17 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private double returnMoneyToPlayerAndBalance(Player player, double amount) {
+		double returned = returnMoneyToPlayer(player, amount);
+		if (Tools.round(returned) > 0)
+			plugin.getRewardManager().addMoneyToPlayerBalance(player, Tools.round(returned));
+		return returned;
+	}
+
+	private double returnMoneyToPlayer(Player player, double amount) {
 		if (player == null || amount <= 0)
 			return 0;
 
 		double returned = plugin.getRewardManager().addMoneyToPlayer(player, Tools.round(amount));
-		if (Tools.round(returned) > 0)
-			plugin.getRewardManager().addMoneyToPlayerBalance(player, Tools.round(returned));
 		if (Tools.round(returned) < Tools.round(amount))
 			shopkeepersDebug("returned only %s of %s to %s's inventory; the remainder may have been dropped",
 					Tools.format(returned), Tools.format(amount), player.getName());
