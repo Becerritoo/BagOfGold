@@ -890,9 +890,16 @@ public class ShopkeepersCompat implements Listener {
 					|| receivedTemplate.getQuantity() != expectedTemplate.getQuantity()
 					|| Tools.round(receivedTemplate.getUnitAmount()) != Tools.round(expectedTemplate.getUnitAmount())
 					|| !hasPreparedAmount(player, expectedTemplate.getTotalAmount())) {
-				cancelTrade(event, "This Shopkeepers BagOfGold payment was not prepared by the server.");
+					cancelTrade(event, "This Shopkeepers BagOfGold payment was not prepared by the server.");
+					return null;
+			}
+			ItemStack sellerPayment = createShopkeepersMoneyItem(expectedTemplate.getTotalAmount());
+			if (sellerPayment == null || !setUnmodifiableItemStack(event, receivedSetter, sellerPayment)) {
+				cancelTrade(event, "Could not create the BagOfGold payment for this Shopkeepers trade.");
 				return null;
 			}
+			shopkeepersDebug("price template converted to seller payment: amount=%s item=%s",
+					Tools.format(expectedTemplate.getTotalAmount()), describeItem(sellerPayment));
 			return 0D;
 		}
 
@@ -924,7 +931,10 @@ public class ShopkeepersCompat implements Listener {
 			return null;
 		}
 
-		setUnmodifiableItemStack(event, receivedSetter, normalizedPayment);
+		if (!setUnmodifiableItemStack(event, receivedSetter, normalizedPayment)) {
+			cancelTrade(event, "Could not update the BagOfGold payment item for this Shopkeepers trade.");
+			return null;
+		}
 		return change;
 	}
 
@@ -951,6 +961,17 @@ public class ShopkeepersCompat implements Listener {
 		Reward reward = Reward.getReward(item);
 		reward.setMoney(Tools.round(money));
 		return Reward.setDisplayNameAndHiddenLores(item, reward);
+	}
+
+	private ItemStack createShopkeepersMoneyItem(double money) {
+		double amount = Tools.round(money);
+		if (!ShopkeepersPriceParser.isValidAmount(amount))
+			return null;
+
+		UUID bagId = UUID.fromString(RewardType.BAGOFGOLD.getUUID());
+		Reward reward = new Reward(Core.getConfigManager().bagOfGoldName, amount, RewardType.BAGOFGOLD, bagId);
+		return CoreCustomItems.getCustomtexture(reward, Core.getConfigManager().skullTextureValue,
+				Core.getConfigManager().skullTextureSignature);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -1022,15 +1043,16 @@ public class ShopkeepersCompat implements Listener {
 					player.getName(), Tools.format(change), Tools.format(returned));
 	}
 
-	private void setUnmodifiableItemStack(Event event, String setterName, ItemStack item) {
+	private boolean setUnmodifiableItemStack(Event event, String setterName, ItemStack item) {
 		try {
 			Class<?> itemClass = loadShopkeepersClass("com.nisovin.shopkeepers.api.util.UnmodifiableItemStack");
 			Object unmodifiableItem = itemClass.getMethod("of", ItemStack.class).invoke(null, item);
 			event.getClass().getMethod(setterName, itemClass).invoke(event, unmodifiableItem);
+			return true;
 		} catch (Exception e) {
-			cancelTrade(event, "Could not update the BagOfGold payment item for this Shopkeepers trade.");
 			if (plugin.getConfigManager().debug)
 				e.printStackTrace();
+			return false;
 		}
 	}
 
