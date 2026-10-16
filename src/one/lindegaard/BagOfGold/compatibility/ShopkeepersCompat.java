@@ -31,10 +31,13 @@ import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.Plugin;
 
 import one.lindegaard.BagOfGold.BagOfGold;
+import one.lindegaard.CustomItemsLib.Core;
 import one.lindegaard.CustomItemsLib.Tools;
 import one.lindegaard.CustomItemsLib.api.SignedItemData;
 import one.lindegaard.CustomItemsLib.compatibility.CompatPlugin;
+import one.lindegaard.CustomItemsLib.rewards.CoreCustomItems;
 import one.lindegaard.CustomItemsLib.rewards.Reward;
+import one.lindegaard.CustomItemsLib.rewards.RewardType;
 
 public class ShopkeepersCompat implements Listener {
 
@@ -377,9 +380,7 @@ public class ShopkeepersCompat implements Listener {
 			return;
 
 		try {
-			Class<?> regularAdminClass = loadShopkeepersClass(
-					"com.nisovin.shopkeepers.api.shopkeeper.admin.regular.RegularAdminShopkeeper");
-			if (!regularAdminClass.isInstance(shopkeeper))
+			if (!supportsPriceTemplateOffers(shopkeeper))
 				return;
 
 			Object uniqueId = invoke(shopkeeper, "getUniqueId");
@@ -410,6 +411,8 @@ public class ShopkeepersCompat implements Listener {
 
 			if (!changed)
 				return;
+			shopkeepersDebug("converting price templates: shopkeeper=%s editor=%s offers=%s rejected=%s",
+					shopkeeperId, player.getName(), updatedOffers.size(), rejected);
 			shopkeeper.getClass().getMethod("setOffers", List.class).invoke(shopkeeper, updatedOffers);
 			invoke(shopkeeper, "saveDelayed");
 			if (rejected > 0) {
@@ -425,6 +428,14 @@ public class ShopkeepersCompat implements Listener {
 			if (plugin.getConfigManager().debugIntegrationShopkeepers)
 				exception.printStackTrace();
 		}
+	}
+
+	private boolean supportsPriceTemplateOffers(Object shopkeeper) throws ClassNotFoundException {
+		Class<?> regularAdminClass = loadShopkeepersClass(
+				"com.nisovin.shopkeepers.api.shopkeeper.admin.regular.RegularAdminShopkeeper");
+		Class<?> tradingPlayerClass = loadShopkeepersClass(
+				"com.nisovin.shopkeepers.api.shopkeeper.player.trade.TradingPlayerShopkeeper");
+		return regularAdminClass.isInstance(shopkeeper) || tradingPlayerClass.isInstance(shopkeeper);
 	}
 
 	private boolean tradeUsesBagOfGold(Object trade) {
@@ -1068,7 +1079,9 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private ItemStack createPriceTemplate(UUID shopkeeperId, double amount) {
-		ItemStack template = new ItemStack(Material.PAPER);
+		ItemStack template = CoreCustomItems.getCustomTextureItem(UUID.fromString(RewardType.BAGOFGOLD.getUUID()),
+				"BagOfGold price template", Core.getConfigManager().skullTextureValue,
+				Core.getConfigManager().skullTextureSignature);
 		ItemMeta meta = template.getItemMeta();
 		meta.setDisplayName(ChatColor.GOLD + "BagOfGold price: " + Tools.format(amount));
 		meta.setLore(List.of(ChatColor.DARK_GRAY + "Signed Shopkeepers price template"));
