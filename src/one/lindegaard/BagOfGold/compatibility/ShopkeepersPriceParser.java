@@ -29,4 +29,11 @@ final class ShopkeepersPriceParser {
 	static boolean isValidAmount(double amount) {
 		return Double.isFinite(amount) && amount > 0 && amount <= MAX_PRICE;
 	}
+
+	static double calculateTotal(double unitAmount, int quantity) {
+		if (!isValidAmount(unitAmount) || quantity <= 0)
+			return 0;
+		double total = unitAmount * quantity;
+		return isValidAmount(total) ? total : 0;
+	}
 }

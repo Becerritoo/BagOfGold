@@ -75,16 +75,6 @@ public class ShopkeepersCompat implements Listener {
 		}
 	}
 
-	private static class PriceTemplate {
-		private final UUID shopkeeperId;
-		private final double amount;
-
-		private PriceTemplate(UUID shopkeeperId, double amount) {
-			this.shopkeeperId = shopkeeperId;
-			this.amount = amount;
-		}
-	}
-
 	private static class PlaceholderConversion {
 		private final boolean matched;
 		private final ItemStack item;
@@ -462,11 +452,12 @@ public class ShopkeepersCompat implements Listener {
 
 	private ItemStack createMatchingMoneyItem(ItemStack template, double money) {
 		if (isShopkeepersPriceTemplate(template)) {
-			PriceTemplate priceTemplate = getPriceTemplate(template);
-			if (priceTemplate == null || Tools.round(priceTemplate.amount) != Tools.round(money))
+			ShopkeepersPriceTemplate priceTemplate = getPriceTemplate(template);
+			if (priceTemplate == null
+					|| Tools.round(priceTemplate.getTotalAmount()) != Tools.round(money))
 				return null;
 			ItemStack item = template.clone();
-			item.setAmount(1);
+			item.setAmount(priceTemplate.getQuantity());
 			return item;
 		}
 		if (!isBagOfGoldMoney(template))
@@ -889,14 +880,16 @@ public class ShopkeepersCompat implements Listener {
 		ItemStack expected = getTradeItem(tradingRecipe, recipeMethod);
 		ItemStack received = getTradeItem(event, receivedGetter);
 
-		PriceTemplate expectedTemplate = getPriceTemplate(expected);
+		ShopkeepersPriceTemplate expectedTemplate = getPriceTemplate(expected);
 		if (expectedTemplate != null) {
-			PriceTemplate receivedTemplate = getPriceTemplate(received);
+			ShopkeepersPriceTemplate receivedTemplate = getPriceTemplate(received);
 			UUID shopkeeperId = getShopkeeperId(event);
-			if (receivedTemplate == null || shopkeeperId == null || !shopkeeperId.equals(expectedTemplate.shopkeeperId)
-					|| !shopkeeperId.equals(receivedTemplate.shopkeeperId)
-					|| Tools.round(receivedTemplate.amount) != Tools.round(expectedTemplate.amount)
-					|| !hasPreparedAmount(player, expectedTemplate.amount)) {
+			if (receivedTemplate == null || shopkeeperId == null
+					|| !shopkeeperId.equals(expectedTemplate.getShopkeeperId())
+					|| !shopkeeperId.equals(receivedTemplate.getShopkeeperId())
+					|| receivedTemplate.getQuantity() != expectedTemplate.getQuantity()
+					|| Tools.round(receivedTemplate.getUnitAmount()) != Tools.round(expectedTemplate.getUnitAmount())
+					|| !hasPreparedAmount(player, expectedTemplate.getTotalAmount())) {
 				cancelTrade(event, "This Shopkeepers BagOfGold payment was not prepared by the server.");
 				return null;
 			}
@@ -936,9 +929,9 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private double getMoneyValue(ItemStack item) {
-		PriceTemplate priceTemplate = getPriceTemplate(item);
+		ShopkeepersPriceTemplate priceTemplate = getPriceTemplate(item);
 		if (priceTemplate != null)
-			return Tools.round(priceTemplate.amount);
+			return Tools.round(priceTemplate.getTotalAmount());
 		if (!isBagOfGoldMoney(item))
 			return 0;
 
@@ -1050,9 +1043,10 @@ public class ShopkeepersCompat implements Listener {
 	}
 
 	private PlaceholderConversion convertPricePlaceholder(ItemStack item, UUID shopkeeperId, Player editor) {
-		PriceTemplate existing = getPriceTemplate(item);
+		ShopkeepersPriceTemplate existing = readPriceTemplate(item, false);
 		if (existing != null) {
-			return new PlaceholderConversion(true, createPriceTemplate(shopkeeperId, existing.amount));
+			return new PlaceholderConversion(true,
+					createPriceTemplate(shopkeeperId, existing.getUnitAmount(), item.getAmount()));
 		}
 		if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta())
 			return new PlaceholderConversion(false, item);
@@ -1075,22 +1069,36 @@ public class ShopkeepersCompat implements Listener {
 		Double amount = ShopkeepersPriceParser.parse(displayName);
 		if (amount == null)
 			return new PlaceholderConversion(true, null);
-		return new PlaceholderConversion(true, createPriceTemplate(shopkeeperId, amount));
+		return new PlaceholderConversion(true, createPriceTemplate(shopkeeperId, amount, item.getAmount()));
 	}
 
-	private ItemStack createPriceTemplate(UUID shopkeeperId, double amount) {
+	private ItemStack createPriceTemplate(UUID shopkeeperId, double unitAmount, int quantity) {
+		ShopkeepersPriceTemplate price = ShopkeepersPriceTemplate.create(shopkeeperId, unitAmount, quantity);
+		if (price == null)
+			return null;
 		ItemStack template = CoreCustomItems.getCustomTextureItem(UUID.fromString(RewardType.BAGOFGOLD.getUUID()),
 				"BagOfGold price template", Core.getConfigManager().skullTextureValue,
 				Core.getConfigManager().skullTextureSignature);
+		template.setAmount(price.getQuantity());
 		ItemMeta meta = template.getItemMeta();
-		meta.setDisplayName(ChatColor.GOLD + "BagOfGold price: " + Tools.format(amount));
-		meta.setLore(List.of(ChatColor.DARK_GRAY + "Signed Shopkeepers price template"));
+		meta.setDisplayName(ChatColor.GOLD + "BagOfGold price: " + Tools.format(price.getUnitAmount()));
+		if (price.getQuantity() == 1) {
+			meta.setLore(List.of(ChatColor.DARK_GRAY + "Signed Shopkeepers price template"));
+		} else {
+			meta.setLore(List.of(
+					ChatColor.GRAY + Tools.format(price.getUnitAmount()) + " x " + price.getQuantity() + " = "
+							+ Tools.format(price.getTotalAmount()),
+					ChatColor.DARK_GRAY + "Signed Shopkeepers price template"));
+		}
 		template.setItemMeta(meta);
-		String payload = shopkeeperId + "|" + Double.toString(Tools.round(amount));
-		return SignedItemData.sign(template, PRICE_TEMPLATE_PURPOSE, payload);
+		return SignedItemData.sign(template, PRICE_TEMPLATE_PURPOSE, price.serialize());
 	}
 
-	private PriceTemplate getPriceTemplate(ItemStack item) {
+	private ShopkeepersPriceTemplate getPriceTemplate(ItemStack item) {
+		return readPriceTemplate(item, true);
+	}
+
+	private ShopkeepersPriceTemplate readPriceTemplate(ItemStack item, boolean requireSignedQuantity) {
 		SignedItemData data;
 		try {
 			data = SignedItemData.readVerified(item, PRICE_TEMPLATE_PURPOSE);
@@ -1100,18 +1108,12 @@ public class ShopkeepersCompat implements Listener {
 		if (data == null)
 			return null;
 
-		String[] parts = data.getPayload().split("\\|", 2);
-		if (parts.length != 2)
+		ShopkeepersPriceTemplate price = ShopkeepersPriceTemplate.parse(data.getPayload());
+		if (price == null)
 			return null;
-		try {
-			UUID shopkeeperId = UUID.fromString(parts[0]);
-			double amount = Tools.round(Double.parseDouble(parts[1]));
-			if (!ShopkeepersPriceParser.isValidAmount(amount) || item.getAmount() != 1)
-				return null;
-			return new PriceTemplate(shopkeeperId, amount);
-		} catch (IllegalArgumentException exception) {
+		if (requireSignedQuantity && item.getAmount() != price.getQuantity())
 			return null;
-		}
+		return price;
 	}
 
 	private Object createTradeOffer(ItemStack result, ItemStack item1, ItemStack item2) throws Exception {

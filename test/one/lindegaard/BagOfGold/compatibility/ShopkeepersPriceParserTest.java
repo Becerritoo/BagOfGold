@@ -22,4 +22,12 @@ public class ShopkeepersPriceParserTest {
 		assertNull(ShopkeepersPriceParser.parse("bagofgold 1.000001"));
 		assertNull(ShopkeepersPriceParser.parse("bagofgold 3000 extra"));
 	}
+
+	@Test
+	public void calculatesSafeMultipliedPrice() {
+		assertEquals(400D, ShopkeepersPriceParser.calculateTotal(200D, 2), 0D);
+		assertEquals(600D, ShopkeepersPriceParser.calculateTotal(200D, 3), 0D);
+		assertEquals(0D, ShopkeepersPriceParser.calculateTotal(200D, 0), 0D);
+		assertEquals(0D, ShopkeepersPriceParser.calculateTotal(1_000_000_000_000D, 2), 0D);
+	}
 }
