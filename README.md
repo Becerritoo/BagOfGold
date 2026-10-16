@@ -70,7 +70,7 @@ including money inside carried shulker boxes and bundles.
 ## Shopkeepers price templates
 
 An operator with `bagofgold.shopkeepers.template` can place renamed paper such
-as `bagofgold 3000` in an admin Shopkeeper editor. When the editor is saved,
+as `bagofgold 3000` in a regular admin or player trading Shopkeeper editor. When the editor is saved,
 BagOfGold replaces it with a signed price template bound to that Shopkeeper.
 The template is not currency and cannot increase a player's balance. During a
 purchase, BagOfGold withdraws the exact price from physical money and returns

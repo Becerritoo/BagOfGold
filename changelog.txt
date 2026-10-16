@@ -1,5 +1,6 @@
 V4.8.0 (2026-10-15)
 * Add signed Shopkeepers price templates using renamed paper in the form `bagofgold 3000`.
+* Convert templates in both regular admin shops and player trading shops, using the configured bag texture.
 * Bind each template to its Shopkeeper and keep it separate from real BagOfGold currency.
 * Withdraw the configured price from loose and portable physical money, split larger bags and return change.
 * Block copied or manually moved price templates from being used as money.
