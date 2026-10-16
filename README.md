@@ -76,7 +76,8 @@ The paper stack size acts as a signed multiplier: two papers named
 `bagofgold 200` create a price of `200 x 2 = 400`.
 The template is not currency and cannot increase a player's balance. During a
 purchase, BagOfGold withdraws the exact price from physical money and returns
-change when required.
+change when required. Player trading Shopkeepers receive a newly signed money
+bag for the exact payment in their attached container.
 
 See [the maintained fork notes](docs/MAINTAINED-FORK.md) for compatibility and
 migration details.
