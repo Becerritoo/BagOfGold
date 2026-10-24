@@ -1,8 +1,9 @@
 package one.lindegaard.BagOfGold.rewards;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
@@ -44,6 +45,7 @@ import one.lindegaard.CustomItemsLib.rewards.CoreCustomItems;
 import one.lindegaard.CustomItemsLib.rewards.Reward;
 import one.lindegaard.CustomItemsLib.rewards.RewardType;
 import one.lindegaard.CustomItemsLib.rewards.TokenSpendStore;
+import one.lindegaard.CustomItemsLib.rewards.TokenSpendStore.TokenSpend;
 import one.lindegaard.CustomItemsLib.server.Servers;
 
 public class BagOfGoldItems implements Listener {
@@ -209,65 +211,179 @@ public class BagOfGoldItems implements Listener {
 		return 0;
 	}
 
-	public double removeBagOfGoldFromPortableContainers(Player player, double amount) {
-		double remaining = Tools.round(amount);
-		double taken = 0;
-		for (int slot = 0; slot < player.getInventory().getSize() && remaining > 0; slot++) {
-			ItemStack containerItem = player.getInventory().getItem(slot);
-			double removed = removeMoneyFromPortableContainer(player, containerItem, remaining, 0);
-			if (removed <= 0)
-				continue;
-			taken = Tools.round(taken + removed);
-			remaining = Tools.round(remaining - removed);
-			player.getInventory().setItem(slot, containerItem);
+	private static final class PlannedSlotUpdate {
+		private final int slot;
+		private final ItemStack item;
+
+		private PlannedSlotUpdate(int slot, ItemStack item) {
+			this.slot = slot;
+			this.item = item;
 		}
-		if (remaining > 0) {
-			ItemStack cursorItem = player.getItemOnCursor();
-			double removed = removeMoneyFromPortableContainer(player, cursorItem, remaining, 0);
-			if (removed > 0) {
-				taken = Tools.round(taken + removed);
-				player.setItemOnCursor(cursorItem);
-			}
-		}
-		return taken;
 	}
 
-	private double removeMoneyFromPortableContainer(Player player, ItemStack containerItem, double amount, int depth) {
-		if (depth >= MAX_PORTABLE_CONTAINER_DEPTH)
-			return 0;
-		if (containerItem == null || !containerItem.hasItemMeta())
+	private static final class PhysicalSpendPlan {
+		private double remaining;
+		private final UUID playerUuid;
+		private final Set<String> tokenUuids = new HashSet<>();
+		private final List<TokenSpend> tokenSpends = new ArrayList<>();
+		private final List<PlannedSlotUpdate> slotUpdates = new ArrayList<>();
+		private boolean duplicateToken;
+		private boolean malformedStack;
+		private boolean cursorChanged;
+		private ItemStack cursorItem;
+
+		private PhysicalSpendPlan(Player player, double amount) {
+			playerUuid = player.getUniqueId();
+			remaining = Tools.round(amount);
+		}
+
+		private void claim(Reward reward, double amount, String source) {
+			String tokenUuid = reward.getTokenUUID();
+			if (tokenUuid == null || tokenUuid.isEmpty() || !tokenUuids.add(tokenUuid)) {
+				duplicateToken = true;
+				return;
+			}
+			if (amount > 0)
+				tokenSpends.add(new TokenSpend(tokenUuid, playerUuid, source, amount));
+		}
+	}
+
+	/**
+	 * Remove physical currency as one transaction. Inventory mutations are planned
+	 * on clones first. The real inventory is changed only after the exact amount is
+	 * available and every consumed token has been claimed atomically.
+	 */
+	public double removeBagOfGoldMoneyAtomically(Player player, double amount) {
+		double requested = Tools.round(amount);
+		if (requested <= 0)
 			return 0;
 
-		ItemMeta meta = containerItem.getItemMeta();
+		PhysicalSpendPlan plan = new PhysicalSpendPlan(player, requested);
+		for (int slot = player.getInventory().getSize() - 1; slot >= 0; slot--) {
+			ItemStack original = player.getInventory().getItem(slot);
+			if (original == null || original.getType().isAir())
+				continue;
+
+			int mutationsBefore = plan.tokenSpends.size();
+			ItemStack updated = planMoneyRemoval(player, original.clone(), plan, 0, "inventory-spend");
+			if (plan.tokenSpends.size() != mutationsBefore)
+				plan.slotUpdates.add(new PlannedSlotUpdate(slot, updated));
+		}
+
+		ItemStack cursor = player.getItemOnCursor();
+		if (cursor != null && !cursor.getType().isAir()) {
+			int mutationsBefore = plan.tokenSpends.size();
+			plan.cursorItem = planMoneyRemoval(player, cursor.clone(), plan, 0, "inventory-cursor-spend");
+			plan.cursorChanged = plan.tokenSpends.size() != mutationsBefore;
+		}
+
+		if (plan.duplicateToken || plan.malformedStack) {
+			plugin.getMessages().debug(
+					"Rejected physical-currency transaction for %s because the inventory contains duplicated or stacked token data.",
+					player.getName());
+			return 0;
+		}
+		if (Tools.round(plan.remaining) > 0 || plan.tokenSpends.isEmpty())
+			return 0;
+		if (Core.getTokenSpendStore() == null) {
+			plugin.getMessages().debug("Rejected physical-currency transaction for %s because the token store is unavailable.",
+					player.getName());
+			return 0;
+		}
+
+		TokenSpendStore.MarkResult result = Core.getTokenSpendStore().markTokensSpent(plan.tokenSpends);
+		if (result != TokenSpendStore.MarkResult.MARKED) {
+			plugin.getMessages().debug("Rejected physical-currency transaction for %s because token claim returned %s.",
+					player.getName(), result);
+			return 0;
+		}
+
+		for (PlannedSlotUpdate update : plan.slotUpdates)
+			player.getInventory().setItem(update.slot, update.item);
+		if (plan.cursorChanged)
+			player.setItemOnCursor(plan.cursorItem);
+		return requested;
+	}
+
+	private ItemStack planMoneyRemoval(Player player, ItemStack item, PhysicalSpendPlan plan, int depth,
+			String source) {
+		if (item == null || item.getType().isAir())
+			return item;
+
+		if (Reward.isReward(item)) {
+			Reward reward = Reward.getReward(item);
+			if (!reward.checkHash()) {
+				Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING + player.getName()
+						+ " has an invalid BagOfGold item; it was excluded from the transaction.");
+				return item;
+			}
+			if (!reward.isMoney() || Tools.round(reward.getMoney()) <= 0)
+				return item;
+			if (item.getAmount() != 1) {
+				plan.malformedStack = true;
+				return item;
+			}
+
+			double consumed = plan.remaining > 0 ? Math.min(Tools.round(reward.getMoney()), plan.remaining) : 0;
+			plan.claim(reward, consumed, source);
+			if (consumed <= 0 || plan.duplicateToken)
+				return item;
+
+			plan.remaining = Tools.round(plan.remaining - consumed);
+			if (Tools.round(consumed) >= Tools.round(reward.getMoney()))
+				return null;
+
+			reward.setMoney(Tools.round(reward.getMoney() - consumed));
+			ItemStack remainder = Reward.setDisplayNameAndHiddenLores(item, reward);
+			remainder.setAmount(1);
+			return remainder;
+		}
+
+		if (depth >= MAX_PORTABLE_CONTAINER_DEPTH || !item.hasItemMeta())
+			return item;
+
+		ItemMeta meta = item.getItemMeta();
 		if (meta instanceof BlockStateMeta blockStateMeta
 				&& blockStateMeta.getBlockState() instanceof ShulkerBox shulker) {
-			double taken = removeMoneyFromInventory(player, shulker.getSnapshotInventory(), amount, depth + 1);
-			if (taken > 0) {
-				blockStateMeta.setBlockState(shulker);
-				containerItem.setItemMeta(blockStateMeta);
+			Inventory inventory = shulker.getSnapshotInventory();
+			ItemStack[] contents = inventory.getStorageContents();
+			boolean changed = false;
+			for (int slot = contents.length - 1; slot >= 0; slot--) {
+				ItemStack original = contents[slot];
+				if (original == null || original.getType().isAir())
+					continue;
+				int mutationsBefore = plan.tokenSpends.size();
+				contents[slot] = planMoneyRemoval(player, original.clone(), plan, depth + 1,
+						"portable-container-spend");
+				changed |= plan.tokenSpends.size() != mutationsBefore;
 			}
-			return taken;
+			if (changed) {
+				inventory.setStorageContents(contents);
+				blockStateMeta.setBlockState(shulker);
+				item.setItemMeta(blockStateMeta);
+			}
+			return item;
 		}
 
 		if (meta instanceof BundleMeta bundleMeta && bundleMeta.hasItems()) {
 			List<ItemStack> contents = new ArrayList<>(bundleMeta.getItems());
-			double taken = removeMoneyFromList(player, contents, amount, depth + 1);
-			if (taken > 0) {
-				contents.removeIf(item -> item == null || item.getType().isAir());
-				bundleMeta.setItems(contents);
-				containerItem.setItemMeta(bundleMeta);
+			boolean changed = false;
+			for (int slot = contents.size() - 1; slot >= 0; slot--) {
+				ItemStack original = contents.get(slot);
+				if (original == null || original.getType().isAir())
+					continue;
+				int mutationsBefore = plan.tokenSpends.size();
+				contents.set(slot, planMoneyRemoval(player, original.clone(), plan, depth + 1,
+						"portable-container-spend"));
+				changed |= plan.tokenSpends.size() != mutationsBefore;
 			}
-			return taken;
+			if (changed) {
+				contents.removeIf(content -> content == null || content.getType().isAir());
+				bundleMeta.setItems(contents);
+				item.setItemMeta(bundleMeta);
+			}
 		}
-		return 0;
-	}
-
-	private double removeMoneyFromInventory(Player player, Inventory inventory, double amount, int depth) {
-		List<ItemStack> contents = new ArrayList<>(Arrays.asList(inventory.getStorageContents()));
-		double taken = removeMoneyFromList(player, contents, amount, depth);
-		if (taken > 0)
-			inventory.setStorageContents(contents.toArray(new ItemStack[0]));
-		return taken;
+		return item;
 	}
 
 	private void syncPortableMoneyOnNextTick(Player player, String sourceHint) {
@@ -296,62 +412,6 @@ public class BagOfGoldItems implements Listener {
 		Player player = event.getPlayer();
 		if (hasMoneyInPortableContainer(player, event.getItemInHand()))
 			syncPortableMoneyOnNextTick(player, "portable-container-place");
-	}
-
-	private double removeMoneyFromList(Player player, List<ItemStack> contents, double amount, int depth) {
-		double remaining = Tools.round(amount);
-		double taken = 0;
-		for (int slot = contents.size() - 1; slot >= 0 && remaining > 0; slot--) {
-			ItemStack item = contents.get(slot);
-			if (!Reward.isReward(item)) {
-				double removed = removeMoneyFromPortableContainer(player, item, remaining, depth);
-				if (removed > 0) {
-					taken = Tools.round(taken + removed);
-					remaining = Tools.round(remaining - removed);
-					contents.set(slot, item);
-				}
-				continue;
-			}
-
-			Reward reward = Reward.getReward(item);
-			if (!reward.checkHash()) {
-				Bukkit.getConsoleSender().sendMessage(BagOfGold.PREFIX_WARNING + player.getName()
-						+ " has tried to change the value of a BagOfGold Item. Value set to 0!");
-				reward.setMoney(0);
-				contents.set(slot, Reward.setDisplayNameAndHiddenLores(item, reward));
-				continue;
-			}
-			if (!reward.isMoney())
-				continue;
-
-			double value = Tools.round(reward.getMoney());
-			double consumed = Math.min(value, remaining);
-			TokenSpendStore.MarkResult spendResult = TokenSpendStore.MarkResult.MARKED;
-			if (Core.getTokenSpendStore() != null)
-				spendResult = Core.getTokenSpendStore().markTokenSpent(reward.getTokenUUID(), player.getUniqueId(),
-						"portable-container-spend", consumed);
-			if (spendResult == TokenSpendStore.MarkResult.DUPLICATE) {
-				plugin.getMessages().debug(
-						"Rejected duplicated portable-container token while spending for %s (token=%s).",
-						player.getName(), reward.getTokenUUID());
-				contents.set(slot, null);
-				continue;
-			}
-			if (spendResult == TokenSpendStore.MarkResult.ERROR)
-				plugin.getMessages().debug(
-						"Token spend store unavailable while spending portable-container token for %s. Falling back to signature-only check.",
-						player.getName());
-
-			taken = Tools.round(taken + consumed);
-			remaining = Tools.round(remaining - consumed);
-			if (consumed >= value) {
-				contents.set(slot, null);
-			} else {
-				reward.setMoney(Tools.round(value - consumed));
-				contents.set(slot, Reward.setDisplayNameAndHiddenLores(item, reward));
-			}
-		}
-		return taken;
 	}
 
 	public double getSpaceForBagOfGoldMoney(Player player) {

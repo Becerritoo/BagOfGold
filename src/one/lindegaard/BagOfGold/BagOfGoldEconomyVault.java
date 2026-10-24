@@ -392,7 +392,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 
 			PlayerBalance balance = getWorldPlayerBalance(offlinePlayer, world);
 			double before = total(balance);
-			double debtPayment = plugin.getRewardManager().applyDeposit(balance, amount);
+			double debtPayment = plugin.getRewardManager().applyOfflineDeposit(balance, amount);
 			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, balance);
 			recordBalanceLedger(offlinePlayer, before, total(balance), debtPayment > 0
 					? "depositPlayer-world-debt-payment" : "depositPlayer-world");
@@ -582,7 +582,7 @@ public class BagOfGoldEconomyVault implements Economy, Listener {
 			if (!plugin.getRewardManager().canWithdraw(balance, amount))
 				return failure(amount, currentBalance, "Debt limit exceeded");
 			double before = total(balance);
-			double debtCreated = plugin.getRewardManager().applyWithdrawal(balance, amount);
+			double debtCreated = plugin.getRewardManager().applyOfflineWithdrawal(balance, amount);
 			plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, balance);
 			recordBalanceLedger(offlinePlayer, before, total(balance), debtCreated > 0
 					? "withdrawPlayer-world-debt-created" : "withdrawPlayer-world");
