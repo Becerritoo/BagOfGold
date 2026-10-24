@@ -450,11 +450,10 @@ public class RewardManager {
 		plugin.getMessages().debug("Removing %s from %s's balance %s", Tools.format(amount), offlinePlayer.getName(),
 				Tools.format(ps.getBalance() + ps.getBalanceChanges()));
 		if (offlinePlayer.isOnline()) {
-			ps.setBalance(Tools.round(Math.max(0, cash(ps) - amount)));
-			ps.setBalanceChanges(0);
+			ps.setBalance(Tools.round(Math.max(0, ps.getBalance() - amount)));
 		} else {
-			ps.setBalance(Tools.round(Math.max(0, cash(ps) - amount)));
-			ps.setBalanceChanges(0);
+			double cashAfter = Math.max(0, cash(ps) - amount);
+			ps.setBalanceChanges(Tools.round(cashAfter - ps.getBalance()));
 		}
 		plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 	}
@@ -470,12 +469,19 @@ public class RewardManager {
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(offlinePlayer);
 		plugin.getMessages().debug("Adding %s to %s's balance %s", Tools.format(amount), offlinePlayer.getName(),
 				Tools.format(ps.getBalance() + ps.getBalanceChanges()));
-		DebtPolicy.Deposit settlement = DebtPolicy.settleDeposit(ps.getDebt(), amount);
-		ps.setDebt(Tools.round(settlement.debtAfter));
-		if (offlinePlayer.isOnline() && settlement.debtPayment > 0)
-			removeMoneyFromPlayer((Player) offlinePlayer, settlement.debtPayment);
-		ps.setBalance(Tools.round(cash(ps) + settlement.cashCredit));
-		ps.setBalanceChanges(0);
+		if (offlinePlayer.isOnline()) {
+			DebtPolicy.Deposit settlement = DebtPolicy.settleDeposit(ps.getDebt(), amount);
+			ps.setBalance(Tools.round(ps.getBalance() + amount));
+			if (settlement.debtPayment > 0) {
+				double removed = removeMoneyFromPlayer((Player) offlinePlayer, settlement.debtPayment);
+				if (Tools.round(removed) == Tools.round(settlement.debtPayment)) {
+					ps.setBalance(Tools.round(ps.getBalance() - removed));
+					ps.setDebt(Tools.round(settlement.debtAfter));
+				}
+			}
+		} else {
+			applyOfflineDeposit(ps, amount);
+		}
 		plugin.getPlayerBalanceManager().setPlayerBalance(offlinePlayer, ps);
 	}
 
@@ -688,6 +694,10 @@ public class RewardManager {
 		}
 
 		PlayerBalance ps = plugin.getPlayerBalanceManager().getPlayerBalance(player);
+		if (player.getGameMode() == GameMode.SURVIVAL && Tools.round(ps.getBalanceChanges()) != 0) {
+			reconcilePlayerBalanceAfterLoad(player);
+			return;
+		}
 		double amountInInventory = getAmountInInventory(player);
 		plugin.getMessages().debug("amountInInventory = %s", amountInInventory);
 		if (ps != null) {
