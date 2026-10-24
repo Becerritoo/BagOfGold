@@ -1,6 +1,5 @@
 package one.lindegaard.BagOfGold.storage;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -25,7 +24,7 @@ public class DataStoreManager {
 	private BagOfGold plugin;
 
 	// Accessed on multiple threads
-	private final LinkedHashSet<Object> mWaiting = new LinkedHashSet<>();
+	private final PendingBalanceSnapshots mWaiting = new PendingBalanceSnapshots();
 	private final Object mQueueOrderLock = new Object();
 
 	// Accessed only from these threads
@@ -64,7 +63,7 @@ public class DataStoreManager {
 		synchronized (mQueueOrderLock) {
 			// A reconnecting player must never read before their last queued snapshot.
 			mTaskThread.addTask(new StoreTask(mWaiting, player.getUniqueId()), null);
-			mTaskThread.addTask(new PlayerBalanceRetrieverTask(player, mWaiting), callback);
+				mTaskThread.addTask(new PlayerBalanceRetrieverTask(player), callback);
 		}
 	}
 
@@ -80,9 +79,7 @@ public class DataStoreManager {
 	 */
 	public void updatePlayerBalance(OfflinePlayer offlinePlayer, PlayerBalance ps) {
 		synchronized (mQueueOrderLock) {
-			synchronized (mWaiting) {
-				mWaiting.add(new PlayerBalance(offlinePlayer, ps));
-			}
+				mWaiting.put(new PlayerBalance(offlinePlayer, ps));
 		}
 	}
 

@@ -1,10 +1,10 @@
 package one.lindegaard.BagOfGold.storage.asynch;
 
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 
 import one.lindegaard.BagOfGold.PlayerBalance;
+import one.lindegaard.BagOfGold.storage.PendingBalanceSnapshots;
 import one.lindegaard.CustomItemsLib.storage.DataStoreException;
 import one.lindegaard.BagOfGold.storage.IDataStore;
 
@@ -12,18 +12,17 @@ public class Top54BalanceRetrieverTask implements IDataStoreTask<List<PlayerBala
 	private int mCount;
 	private String mWorldGroup;
 	private int mGamemode;
-	private HashSet<Object> mWaiting;
+	private PendingBalanceSnapshots mWaiting;
 
-	public Top54BalanceRetrieverTask(int count, String worldGroup, int mGamemode, HashSet<Object> waiting) {
+	public Top54BalanceRetrieverTask(int count, String worldGroup, int gamemode, PendingBalanceSnapshots waiting) {
 		mCount = count;
 		mWorldGroup = worldGroup;
+		mGamemode = gamemode;
 		mWaiting = waiting;
 	}
 
 	private void updateUsingCache(List<PlayerBalance> stats) {
-		for (Object obj : mWaiting) {
-			if (obj instanceof PlayerBalance) {
-				PlayerBalance cached = (PlayerBalance) obj;
+		for (PlayerBalance cached : mWaiting.snapshot()) {
 
 				Iterator<PlayerBalance> it = stats.iterator();
 				boolean found = false;
@@ -42,21 +41,17 @@ public class Top54BalanceRetrieverTask implements IDataStoreTask<List<PlayerBala
 					}
 				}
 
-				if (!found && cached.getPlayer().getUniqueId().equals(cached.getPlayer().getUniqueId())
-						&& cached.getWorldGroup().equals(cached.getWorldGroup())
-						&& cached.getGamemode() == cached.getGamemode())
+				if (!found && cached.getWorldGroup().equals(mWorldGroup)
+						&& cached.getGamemode().getValue() == mGamemode)
 					stats.add(cached);
-			}
 		}
 	}
 
 	@Override
 	public List<PlayerBalance> run(IDataStore store) throws DataStoreException {
-		synchronized (mWaiting) {
-			List<PlayerBalance> stats = store.loadTop54(mCount, mWorldGroup, mGamemode);
-			updateUsingCache(stats);
-			return stats;
-		}
+		List<PlayerBalance> stats = store.loadTop54(mCount, mWorldGroup, mGamemode);
+		updateUsingCache(stats);
+		return stats;
 	}
 
 	@Override

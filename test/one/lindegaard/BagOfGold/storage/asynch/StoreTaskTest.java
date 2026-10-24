@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.lang.reflect.Proxy;
-import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,6 +14,7 @@ import org.junit.Test;
 
 import one.lindegaard.BagOfGold.PlayerBalance;
 import one.lindegaard.BagOfGold.storage.IDataStore;
+import one.lindegaard.BagOfGold.storage.PendingBalanceSnapshots;
 
 public class StoreTaskTest {
 
@@ -24,9 +24,9 @@ public class StoreTaskTest {
 		UUID secondUuid = UUID.randomUUID();
 		PlayerBalance first = balance(firstUuid);
 		PlayerBalance second = balance(secondUuid);
-		Set<Object> waiting = new LinkedHashSet<Object>();
-		waiting.add(first);
-		waiting.add(second);
+		PendingBalanceSnapshots waiting = new PendingBalanceSnapshots();
+		waiting.put(first);
+		waiting.put(second);
 
 		StoreTask task = new StoreTask(waiting, firstUuid);
 		AtomicBoolean cleanCache = new AtomicBoolean(true);
@@ -45,7 +45,7 @@ public class StoreTaskTest {
 		assertEquals(1, saved[0]);
 		assertFalse(cleanCache.get());
 		assertEquals(1, waiting.size());
-		assertEquals(secondUuid, ((PlayerBalance) waiting.iterator().next()).getPlayer().getUniqueId());
+		assertEquals(secondUuid, waiting.snapshot().get(0).getPlayer().getUniqueId());
 	}
 
 	private PlayerBalance balance(UUID uuid) {
