@@ -10,8 +10,8 @@ who remains credited as the original author.
 
 ## Maintained version
 
-The current development release is **4.8.0**, targeting Paper 1.21.11 with
-Java 21 and CustomItemsLib 1.4.0. Releases use semantic versioning. BagOfGold
+The current release is **4.8.1**, targeting Paper 1.21.11 with
+Java 21 and CustomItemsLib 1.4.1. Releases use semantic versioning. BagOfGold
 registers its physical-currency behavior through the public CustomItemsLib
 service contract.
 
